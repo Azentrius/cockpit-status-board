@@ -16,7 +16,8 @@ Cron Jobs, Image Update Monitor (since 0.20.0) and Update Gaps implement it.
 Read-only, fast (at most 2 seconds), offline, usable without root: the board calls it with
 `superuser: "try"`, and on other hosts its session usually has no administrative access (a login
 with an SSH key starts without it). What is expensive is prepared by the add-on's own timer, which
-writes a world-readable `status.json` (0644, no IP addresses, no user names) that `status` reads.
+writes a world-readable `status.json` (0644, no IP addresses, no user names, no URLs, no paths)
+that `status` reads.
 Exit codes: 0 with an answer (a finding is no error, `danger` exits 0 too), 64 wrong call, 77
 nothing readable without root.
 
@@ -87,6 +88,15 @@ What the board accepts:
 Unknown fields are ignored. At most 50 items count; the tile says how many were left out.
 "Text" means: control characters, zero-width and bidirectional characters are removed, line
 breaks and tabs become spaces, and the page sets it with `textContent` only.
+
+**An add-on that sets `link` must follow it while it is open.** Cockpit keeps a page's frame once
+it is loaded; a jump to `/PACKAGE#/place` then only changes `cockpit.location`, and the page does
+not load again. The page therefore listens to `cockpit.addEventListener("locationchanged", …)` and
+shows the place named there, not only the one it found when it started. Update Gaps does this.
+
+**`status.json` is the add-on's own file.** Its format is up to the add-on (Update Gaps, for
+example, keeps the German texts in an extra field there); the board reads only what the verb
+prints.
 
 ## States
 
