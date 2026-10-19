@@ -6,7 +6,9 @@ file says exactly what the board accepts.
 
 The Cockpit code named here is that of Cockpit 360 (Ubuntu 26.04),
 `https://github.com/cockpit-project/cockpit/blob/360/<path>`. The board was written against it and
-tested against a stand-in for Cockpit (`test/web/mock-cockpit.js`); see "Not proven yet" at the end.
+tested against a stand-in for Cockpit (`test/web/mock-cockpit.js`) and, in CI, against a real
+Cockpit with SSH to the test machine itself (`test/e2e_cockpit.py`); see "Not proven yet" at the
+end.
 
 ## Hosts
 
@@ -220,7 +222,15 @@ Derived from the code of Cockpit 360 and tested against the stand-in only:
 - that a locked key arrives as `error: "locked identity: …"` in the close options of the echo channel;
 - that `cockpit.file()` reads `/proc/sys/kernel/hostname` on the other hosts;
 - what the shell shows after `cockpit.jump()` to a host it is not connected to (`jump()` opens no
-  connection, `pkg/shell/state.tsx`).
+  connection, `pkg/shell/state.tsx`). From the code: it asks "Connect to HOST?" once per browser
+  session (`pkg/shell/hosts_dialog.jsx`, `connect_host`), then connects and opens the page.
+
+The end-to-end test (`test/e2e_cockpit.py`, job `e2e`) checks these four against Cockpit from the
+Ubuntu 24.04 backports, with `AllowMultiHost` on: the other hosts are the test machine itself
+under other names, over SSH with a key in an ssh-agent, an encrypted key that is not in the agent,
+and a closed port. It counts the SSH connections and logins, so it also shows whether the shell's
+connection to a host is the board's. What remains for the bastion: real hosts, keys that
+`pam_ssh_add` loads at login, and `AllowMultiHost` off.
 
 Read from the code as well: neither the shell's router (`pkg/shell/router.jsx`, which passes a
 frame's channels on unchanged) nor `cockpit-ws` checks the `host` of a channel, and the bridge

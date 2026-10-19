@@ -82,5 +82,5 @@ packages: stage
 # As in CI: shell scripts with shellcheck, Python with ruff
 # (the tools: pip install -r test/requirements.txt).
 lint:
-	shellcheck --severity=warning tools/*.sh
+	shellcheck --severity=warning tools/*.sh test/e2e/addon/status
 	ruff check .

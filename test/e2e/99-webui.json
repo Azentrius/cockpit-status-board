@@ -1,0 +1,21 @@
+{
+  "e2e-peer": {
+    "address": "e2e-peer",
+    "port": "2022",
+    "visible": true,
+    "color": "#67d300"
+  },
+  "e2e-locked": {
+    "address": "e2e-locked",
+    "user": "e2elocked",
+    "port": "2022",
+    "visible": true,
+    "color": "#00d1d3"
+  },
+  "e2e-closed": {
+    "address": "e2e-closed",
+    "port": "2023",
+    "visible": true,
+    "color": "#00d39f"
+  }
+}

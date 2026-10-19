@@ -1,0 +1,27 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# The status verb of the add-on "e2e" of the end-to-end test (test/e2e_cockpit.py), installed as
+# /usr/lib/cockpit-e2e/status: an answer of the status contract v1 that tells the test where it
+# ran, as whom and in which language. SSH_CONNECTION ("CLIENT PORT SERVER PORT") is set when the
+# Cockpit bridge that runs it came in over SSH.
+set -eu
+
+if [ "${1:-}" != status ]; then
+    echo "usage: status status --lang en|de" >&2
+    exit 64
+fi
+lang=en
+if [ "${2:-}" = --lang ] && [ "${3:-}" = de ]; then
+    lang=de
+fi
+if [ -n "${SSH_CONNECTION:-}" ]; then
+    via="over SSH to port ${SSH_CONNECTION##* }"
+else
+    via="without SSH"
+fi
+now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+printf '{"schema": 1, "addon": "e2e", "label": "E2E Probe", "version": "1.0.0", "checked_at": "%s", "state": "info",\n' "$now"
+printf ' "summary": "Ran as %s %s (%s)",\n' "$(id -un)" "$via" "$lang"
+printf ' "items": [{"id": "probe", "state": "info", "title": "Probe answers", "value": "1", "link": "#/probe",\n'
+printf '            "checked_at": "%s", "stale_after": 3600}]}\n' "$now"

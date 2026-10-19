@@ -91,6 +91,120 @@ jobs:
           name: screenshots
           path: test/shots/
 
+  # The board against a real Cockpit on the runner's throwaway VM, for what the stand-in can only
+  # imitate: the host switcher's list from the bridge, the bridge's channels to other hosts over
+  # SSH and their shared connection, a locked key, a closed port, the shell's jumps. The other
+  # hosts are this machine under three names, over an SSH server of its own on port 2022 (test/e2e/).
+  # These steps are the setup that test/e2e_cockpit.py expects; they change the machine.
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      # Cockpit from the backports, as Cockpit recommends for Ubuntu (the release itself has an old one).
+      - name: Install Cockpit, the SSH server and the test add-on
+        run: |
+          . /etc/os-release
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends -t "$VERSION_CODENAME-backports" cockpit-ws cockpit-bridge cockpit-system
+          sudo apt-get install -y --no-install-recommends openssh-server
+          dpkg-query -W cockpit-ws cockpit-bridge openssh-server
+          sudo ln -sfn "$GITHUB_WORKSPACE/src" /usr/share/cockpit/status-board
+          sudo install -d /usr/share/cockpit/e2e /usr/lib/cockpit-e2e
+          sudo install -m 644 test/e2e/addon/manifest.json test/e2e/addon/index.html /usr/share/cockpit/e2e/
+          sudo install -m 755 test/e2e/addon/status /usr/lib/cockpit-e2e/status
+          /usr/lib/cockpit-e2e/status status --lang en | python -m json.tool
+      - name: Check tools (pinned in test/requirements.txt) and the browser
+        run: |
+          pip install -r test/requirements.txt
+          python -m playwright install --with-deps chromium
+      # Three names for this machine, as three hosts in the host switcher. The runner's user logs
+      # in with a key that is only in the ssh-agent; e2elocked only with the encrypted key
+      # ~/.ssh/id_ed25519, which is not in the agent (as after "ssh-add -D" on the bastion).
+      # Nothing listens on port 2023.
+      - name: SSH server on 127.0.0.1:2022, keys, ssh-agent, known host keys
+        run: |
+          echo "127.0.0.1 e2e-peer e2e-locked e2e-closed" | sudo tee -a /etc/hosts > /dev/null
+          sudo useradd -m -s /bin/sh e2elocked
+          test ! -e ~/.ssh/id_ed25519
+          install -d -m 700 ~/.ssh
+          ssh-keygen -q -t ed25519 -N '' -C e2e-agent -f "$RUNNER_TEMP/agent-key"
+          ssh-keygen -q -t ed25519 -N 'not in the agent' -C e2e-locked -f ~/.ssh/id_ed25519
+          sudo install -d -m 755 /etc/ssh/e2e-keys
+          sudo install -m 644 "$RUNNER_TEMP/agent-key.pub" "/etc/ssh/e2e-keys/$(id -un)"
+          sudo install -m 644 ~/.ssh/id_ed25519.pub /etc/ssh/e2e-keys/e2elocked
+          sudo ssh-keygen -A
+          sudo install -d -m 755 /run/sshd
+          # created by this user, so that the test can read what sshd (root) appends
+          : > "$RUNNER_TEMP/sshd.log"
+          sudo /usr/sbin/sshd -t -f "$GITHUB_WORKSPACE/test/e2e/sshd_config"
+          sudo /usr/sbin/sshd -f "$GITHUB_WORKSPACE/test/e2e/sshd_config" -E "$RUNNER_TEMP/sshd.log"
+          for i in $(seq 50); do
+            if (exec 3<>/dev/tcp/127.0.0.1/2022) 2>/dev/null; then break; fi
+            sleep 0.2
+          done
+          ssh-keyscan -p 2022 -t ed25519 e2e-peer e2e-locked >> ~/.ssh/known_hosts
+          grep -q '^\[e2e-locked\]:2022 ' ~/.ssh/known_hosts
+          eval "$(ssh-agent -s)"
+          ssh-add -q "$RUNNER_TEMP/agent-key"
+          rm "$RUNNER_TEMP/agent-key"
+          ssh-add -l
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
+          # what the bridge will meet: the agent's key logs in (and the login prints nothing but
+          # the command's output), the locked key does not without its passphrase, port 2023 is closed
+          test "$(ssh -p 2022 -o BatchMode=yes e2e-peer echo ok)" = ok
+          if ssh -p 2022 -o BatchMode=yes e2elocked@e2e-locked true; then
+            echo "::error::e2elocked logged in without the passphrase"; exit 1
+          fi
+          if (exec 3<>/dev/tcp/127.0.0.1/2023) 2>/dev/null; then
+            echo "::error::port 2023 is open"; exit 1
+          fi
+      # This user's own Cockpit without login, as cockpit-desktop runs it: its bridge has the
+      # ssh-agent and reads the host switcher's list from machines.d. AllowMultiHost lets the
+      # shell open the add-on on another host.
+      - name: Start Cockpit as this user, without login
+        run: |
+          printf '[WebService]\nAllowMultiHost = true\n' | sudo tee /etc/cockpit/cockpit.conf > /dev/null
+          sudo install -d /etc/cockpit/machines.d
+          sudo install -m 644 test/e2e/99-webui.json /etc/cockpit/machines.d/99-webui.json
+          # the bridge's SSH (ferny) keeps its control socket in XDG_RUNTIME_DIR, else in /run
+          if [ -z "${XDG_RUNTIME_DIR:-}" ] || [ ! -w "$XDG_RUNTIME_DIR" ]; then
+            export XDG_RUNTIME_DIR="$RUNNER_TEMP/runtime"
+            install -d -m 700 "$XDG_RUNTIME_DIR"
+          fi
+          # the bridge's steps towards the other hosts in the log
+          COCKPIT_DEBUG=cockpit.remote /usr/lib/cockpit/cockpit-ws --no-tls --port 9091 --address 127.0.0.1 \
+            --local-session=cockpit-bridge > "$RUNNER_TEMP/cockpit-ws.log" 2>&1 &
+          for i in $(seq 100); do
+            if (exec 3<>/dev/tcp/127.0.0.1/9091) 2>/dev/null; then exit 0; fi
+            sleep 0.2
+          done
+          cat "$RUNNER_TEMP/cockpit-ws.log"
+          exit 1
+      - name: End-to-end test
+        run: python test/e2e_cockpit.py
+      - name: Logs
+        if: failure()
+        run: |
+          cat "$RUNNER_TEMP/cockpit-ws.log" || true
+          cat "$RUNNER_TEMP/sshd.log" || true
+          ss -tn || true
+          ps -eo pid,user,args | grep -E '[s]sh|[c]ockpit' || true
+          ssh-add -l || true
+          ls -la ~/.ssh || true
+      - name: Keep screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-screenshots
+          path: test/shots/
+
   # Secrets in the files and in the whole history (gitleaks, pinned with its checksum). The
   # findings are redacted in the log; GitHub's own secret scanning with push protection runs
   # as well (repository settings).

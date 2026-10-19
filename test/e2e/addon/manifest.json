@@ -1,0 +1,13 @@
+{
+    "version": 0,
+    "menu": {
+        "index": {
+            "label": "E2E Probe",
+            "path": "index.html",
+            "order": 99
+        }
+    },
+    "azentrius": {
+        "status": ["/usr/lib/cockpit-e2e/status", "status"]
+    }
+}

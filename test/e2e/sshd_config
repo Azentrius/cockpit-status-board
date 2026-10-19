@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# The SSH server of the end-to-end test (job e2e in .github/workflows/test.yml): this machine as
+# the other hosts of the host switcher. Only for the runner's throwaway VM.
+Port 2022
+ListenAddress 127.0.0.1
+HostKey /etc/ssh/ssh_host_ed25519_key
+# One file per user, written by the job: the runner's user gets the key that is only in the agent,
+# e2elocked the encrypted key that is not in the agent.
+AuthorizedKeysFile /etc/ssh/e2e-keys/%u
+PubkeyAuthentication yes
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+# Accounts whose password is locked (as useradd makes them) may log in with a key only through PAM.
+UsePAM yes
+StrictModes no
+PidFile /run/sshd-e2e.pid
+# "Accepted publickey for USER" in the log: the test counts the logins.
+LogLevel VERBOSE

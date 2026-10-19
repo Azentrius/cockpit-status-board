@@ -78,8 +78,10 @@ Cockpit again.
 
 ## Trying it on the bastion
 
-The parts that reach other hosts are written from Cockpit's code and tested against a stand-in
-only. On the host with the host switcher, check once:
+The parts that reach other hosts are written from Cockpit's code; the end-to-end test (see
+Development) checks them against a real Cockpit, with SSH to the test machine itself. Real hosts,
+`pam_ssh_add` and the switcher's own connections show only on the bastion. On the host with the
+host switcher, check once:
 
 1. The rows are the hosts of the switcher, in its order, with the same names.
 2. For a host with the add-ons: the tiles appear, and on the bastion `pgrep -af "ssh.*HOST"` lists
@@ -132,6 +134,21 @@ make packages     # dist/*.deb and dist/*.rpm (needs dpkg-deb and rpmbuild), rep
 `?lang=en`). The fixtures in `test/fixtures` are written for 2026-10-19 19:00 UTC; the browser
 tests set their clock to it. The shared design files in `src/` are byte-identical copies from
 Cron Jobs (`tools/design-files.sha256`); never change them here.
+
+**End-to-end test.** CI runs `test/e2e_cockpit.py` as the job `e2e`, against a real Cockpit from
+the Ubuntu backports on the runner's throwaway VM. Cockpit runs as the runner's user without login
+(`cockpit-ws --local-session`), with an ssh-agent, and the host switcher's list
+(`test/e2e/99-webui.json`) names this same machine three times, reached over an SSH server of its
+own on port 2022 (`test/e2e/sshd_config`): `e2e-peer` with the key in the agent, `e2e-locked`
+whose user accepts only an encrypted key that is not in the agent, and `e2e-closed` on a port
+where nothing listens. A small add-on (`test/e2e/addon`) answers the status verb and says whether
+it ran over SSH. The test drives Cockpit's shell with Playwright and checks what the stand-in can
+only imitate: the host list from the bridge; the echo channel, `find`, the manifests, the status
+verb and the host name over SSH; one SSH connection for all of it, for Refresh and for the
+shell's own connection; "Key locked" and "Unreachable"; and the jumps into the add-on, on this
+host and on another one (where the shell first asks to connect). The job's steps are the setup the
+test expects; they change the machine, so the test runs there only. Its screenshots are kept as
+the artifact `e2e-screenshots`.
 
 ## Releasing
 
