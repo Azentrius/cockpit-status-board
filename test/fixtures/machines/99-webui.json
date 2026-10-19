@@ -1,0 +1,46 @@
+{
+  "localhost": {
+    "visible": true,
+    "color": "#0099d3"
+  },
+  "public-host": {
+    "address": "public-host",
+    "user": "stefan",
+    "visible": true,
+    "color": "#67d300"
+  },
+  "build-host": {
+    "address": "build-host",
+    "visible": true,
+    "color": "#d39e00",
+    "label": "build-host (CI)"
+  },
+  "claw-host": {
+    "address": "claw-host",
+    "port": "2222",
+    "visible": true,
+    "color": "#d3007c"
+  },
+  "old-host": {
+    "address": "old-host",
+    "visible": true,
+    "color": "#00d39f"
+  },
+  "locked-host": {
+    "address": "locked-host",
+    "visible": true,
+    "color": "#00d1d3"
+  },
+  "removed-host": {
+    "address": "removed-host",
+    "visible": false,
+    "color": "#00618a"
+  },
+  "bad host; rm -rf /": {
+    "visible": true
+  },
+  "bad-user": {
+    "user": "root; reboot",
+    "visible": true
+  }
+}

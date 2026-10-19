@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: CC0-1.0 -->
+<!-- AppStream data: Cockpit lists the page under Applications and opens it from there. -->
+<component type="addon">
+  <id>de.azentrius.status_board</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <name>Status Board</name>
+  <summary>The state of the Azentrius add-ons on every host at a glance</summary>
+  <summary xml:lang="de">Der Zustand der Azentrius-Add-ons auf allen Hosts auf einen Blick</summary>
+  <description>
+    <p>
+      A Cockpit page with one row per host of the host switcher and one tile per Azentrius add-on,
+      such as Cron Jobs, Image Update Monitor and Update Gaps: its state, its most important figure
+      and the age of its data. Hosts that do not answer, locked SSH keys, add-ons that are missing on
+      a host and data that is out of date are shown too. A click opens the add-on on its host.
+    </p>
+    <p xml:lang="de">
+      Eine Cockpit-Seite mit einer Zeile je Host des Host-Umschalters und einer Kachel je
+      Azentrius-Add-on, etwa Cron Jobs, Image Update Monitor und Update Gaps: sein Zustand, seine
+      wichtigste Kennzahl und das Alter seiner Daten. Auch Hosts, die nicht antworten, gesperrte
+      SSH-Schlüssel, Add-ons, die auf einem Host fehlen, und veraltete Daten werden gezeigt. Ein Klick
+      öffnet das Add-on auf seinem Host.
+    </p>
+    <p>
+      The page only reads: it runs each add-on's status verb and never asks for administrative
+      access. It belongs on the Cockpit host from which the others are reached.
+    </p>
+    <p xml:lang="de">
+      Die Seite liest nur: Sie ruft das Status-Verb jedes Add-ons auf und fragt nie nach
+      Administratorzugriff. Sie gehört auf den Cockpit-Host, von dem aus die anderen erreicht werden.
+    </p>
+  </description>
+  <extends>org.cockpit_project.cockpit</extends>
+  <launchable type="cockpit-manifest">status-board</launchable>
+  <url type="homepage">https://github.com/Azentrius/cockpit-status-board</url>
+  <url type="bugtracker">https://github.com/Azentrius/cockpit-status-board/issues</url>
+  <developer id="de.azentrius">
+    <name>Azentrius</name>
+  </developer>
+</component>

@@ -1,0 +1,113 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # Everything that runs without a server: lint, the offline tests, the archive and the packages
+  # (each built twice to the same bytes), the packages installed on Debian and Fedora, and the
+  # page in a browser against a stand-in for Cockpit.
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Check tools (pinned in test/requirements.txt)
+        run: pip install -r test/requirements.txt
+      - name: Lint (shellcheck, ruff)
+        run: make lint
+      # test/status.test.js: the status contract against good, broken and hostile answers in
+      # test/fixtures (schema, lengths, invisible characters, links, package folders, commands
+      # below /usr/lib/cockpit-, the host switcher's list, the tiles of the board);
+      # test/i18n.test.js: every text in English and German, no German in English;
+      # test/page.test.js: no HTML from strings, nothing the CSP blocks, no administrative
+      # access, no watch(), only find and the status verb; then the shared design files
+      # (tools/check-design-files.sh) and version, ?v= and changelog (tools/check-version.sh).
+      - name: Offline tests (status contract against the fixtures, texts, page files, design files, version)
+        run: make check
+      - name: Archive (with LICENSE and NOTICE, built twice to the same bytes) and changelog for the current version
+        run: |
+          make package
+          version=$(sh tools/check-version.sh)
+          archive=cockpit-status-board-$version.tar.gz
+          for f in LICENSE NOTICE; do
+            tar -xzOf "$archive" "status-board/$f" | cmp - "$f"
+            tar -tvzf "$archive" "status-board/$f" | grep -q '^-rw-r--r-- 0/0 '
+            grep -qx "$(sha256sum < "$f" | cut -d ' ' -f 1)  status-board/$f" SHA256SUMS
+          done
+          sha256sum "$archive" > "$RUNNER_TEMP/archive.sha256"
+          rm -f "$archive" SHA256SUMS
+          make package > /dev/null
+          sha256sum -c "$RUNNER_TEMP/archive.sha256"
+      - name: Packages (.deb, .rpm) with valid AppStream data, built twice to the same bytes
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends rpm appstream > /dev/null
+          appstreamcli validate --no-net packaging/*.metainfo.xml
+          make packages
+          (cd dist && sha256sum *.deb *.rpm) > first.sha256
+          rm -rf dist && make packages > /dev/null
+          (cd dist && sha256sum -c ../first.sha256)
+      - name: Install and remove the .deb on Debian and the .rpm on Fedora
+        run: |
+          docker run --rm -v "$PWD/dist:/dist:ro" debian:13 sh -ec '
+            apt-get update -qq
+            apt-get install -y -qq /dist/*.deb > /dev/null
+            test -f /usr/share/cockpit/status-board/manifest.json
+            test -f /usr/share/cockpit/status-board/lib/status.js
+            test -f /usr/share/metainfo/de.azentrius.status_board.metainfo.xml
+            dpkg -L cockpit-status-board | grep -qx /usr/share/doc/cockpit-status-board/CC-BY-4.0-Font-Awesome.txt
+            apt-get remove -y -qq cockpit-status-board > /dev/null
+            test ! -e /usr/share/cockpit/status-board'
+          docker run --rm -v "$PWD/dist:/dist:ro" fedora:43 sh -ec '
+            dnf install -y -q /dist/*.rpm
+            rpm -V cockpit-status-board
+            test -f /usr/share/cockpit/status-board/manifest.json
+            dnf remove -y -q cockpit-status-board
+            test ! -e /usr/share/cockpit/status-board'
+      - name: Browser (Playwright, pinned in test/requirements.txt)
+        run: python -m playwright install --with-deps chromium
+      # test/ui_test.py against test/web/mock-cockpit.js, served with Cockpit's CSP: the board of
+      # the fixtures' hosts, hostile and broken answers, hosts that cannot be reached, a locked
+      # key, a timeout, the reload every 5 minutes, English and German, dark, a phone.
+      - name: Browser tests (the page against a stand-in for Cockpit, with Cockpit's CSP)
+        run: make check-ui
+      - name: Keep screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: screenshots
+          path: test/shots/
+
+  # Secrets in the files and in the whole history (gitleaks, pinned with its checksum). The
+  # findings are redacted in the log; GitHub's own secret scanning with push protection runs
+  # as well (repository settings).
+  secrets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: gitleaks 8.21.2 over the history and the files
+        run: |
+          curl -fsSLo gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz
+          echo "5bc41815076e6ed6ef8fbecc9d9b75bcae31f39029ceb55da08086315316e3ba  gitleaks.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/gitleaks"
+          tar -xzf gitleaks.tar.gz -C "$RUNNER_TEMP/gitleaks" gitleaks
+          rm gitleaks.tar.gz
+          "$RUNNER_TEMP/gitleaks/gitleaks" git --redact --no-banner --verbose .
+          "$RUNNER_TEMP/gitleaks/gitleaks" dir --redact --no-banner .

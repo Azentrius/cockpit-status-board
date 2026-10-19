@@ -1,0 +1,14 @@
+{
+    "version": 0,
+    "menu": {
+        "index": {
+            "label": "Status Board",
+            "path": "index.html",
+            "order": 15,
+            "keywords": [
+                { "matches": ["status", "board", "azentrius", "hosts", "add-ons", "addons", "overview",
+                              "übersicht", "zustand", "lage"] }
+            ]
+        }
+    }
+}
