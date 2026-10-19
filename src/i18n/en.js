@@ -83,7 +83,7 @@
         manifest: "Its manifest could not be read.",
 
         emptyTitle: "No add-ons with a status",
-        emptyBody: "None of the hosts has an Azentrius add-on that reports its status yet.",
+        emptyBody: "None of the hosts below has an Azentrius add-on that reports its status yet.",
         hostEmpty: "No Azentrius add-ons with a status on this host.",
 
         machinesFailed: "The host switcher's list could not be read",

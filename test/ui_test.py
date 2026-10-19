@@ -348,6 +348,12 @@ with sync_playwright() as p:
     page = open_page(browser, "scenario=empty")
     check(page.inner_text("#board .az-empty__title") == "Keine Add-ons mit Status", "the empty state names what is missing")
     check(page.evaluate("() => document.querySelector('#board .az-empty__icon svg').getBoundingClientRect().height") == 48, "a 48 px icon")
+    check(rows(page) == ["localhost", "old-host", "quiet-host"], "the hosts still show, so it shows which answer: " + repr(rows(page)))
+    quiet = page.evaluate("""() => { const s = document.querySelector('[data-host="quiet-host"]');
+        return [s.querySelector('h2').innerText, s.querySelectorAll('.sb-tile, .sb-note').length]; }""")
+    check(quiet == ["quiet-host", 0], "a host that answers, without a note of its own: " + repr(quiet))
+    check(tile_label(page, "old-host/unreachable")[1] == "Nicht erreichbar", "a host that does not answer")
+    no_problems(page, "empty")
     page.context.close()
 
     # ---------- English, and languages like Cockpit ----------

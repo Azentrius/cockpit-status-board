@@ -372,7 +372,8 @@
         return h("button", { class: "az-card sb-tile", type: "button", "data-key": key, onclick: () => jumpTo(host, tile) }, parts);
     }
 
-    function renderRow(row, index) {
+    /* quiet: no note for a row without tiles (the empty state above says it for all rows) */
+    function renderRow(row, index, quiet) {
         const host = row.host;
         const id = "host-" + index;
         const sub = host.own ? T.thisHost : (host.connection !== host.label ? host.connection : null);
@@ -383,7 +384,7 @@
                 sub ? h("span", { class: "az-meta" }, sub) : null,
                 addons && row.state !== "none" ? label(row.state, T.words[row.state], true) : null),
             row.tiles.length ? h("div", { class: "sb-tiles" }, row.tiles.map(t => renderTile(host, t)))
-                : h("p", { class: "sb-note" }, T.hostEmpty));
+                : quiet ? null : h("p", { class: "sb-note" }, T.hostEmpty));
     }
 
     function render() {
@@ -394,14 +395,15 @@
 
         renderAlerts();
         const board = $("board");
-        if (rows.length && rows.every(r => r.tiles.length === 0)) {
-            fill(board, h("section", { class: "az-card" }, h("div", { class: "az-empty" },
+        /* No add-on with a status anywhere (yet): say so once, and still show the hosts, so that
+           it shows which of them answer. */
+        const nothing = rows.length > 0 && rows.every(r => r.tiles.every(t => !t.pkg && t.kind !== "loading"));
+        fill(board,
+            nothing ? h("section", { class: "az-card" }, h("div", { class: "az-empty" },
                 h("span", { class: "az-empty__icon" }, icon("info-circle")),
                 h("h2", { class: "az-empty__title" }, T.emptyTitle),
-                h("p", { class: "az-empty__body" }, T.emptyBody))));
-        } else {
-            fill(board, rows.map(renderRow));
-        }
+                h("p", { class: "az-empty__body" }, T.emptyBody))) : null,
+            rows.map((r, i) => renderRow(r, i, nothing)));
         board.setAttribute("aria-busy", state.loading ? "true" : "false");
         if (focusKey) {
             const el = Array.from(board.querySelectorAll("[data-key]")).find(x => x.dataset.key === focusKey);

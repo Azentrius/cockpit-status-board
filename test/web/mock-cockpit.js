@@ -112,8 +112,15 @@
                 "hostkey-host": { reach: "unknown-host" },
             },
         }),
-        /* No other hosts and no add-on with a status. */
-        empty: () => ({ machines: { localhost: { visible: true } }, hosts: { localhost: host("vpn-host", cockpitPackages()) } }),
+        /* No add-on with a status anywhere yet: one host answers, one does not. */
+        empty: () => ({
+            machines: { localhost: { visible: true }, "quiet-host": { visible: true }, "old-host": { visible: true } },
+            hosts: {
+                localhost: host("vpn-host", cockpitPackages()),
+                "quiet-host": host("quiet-host", { system: pkg("system", null) }),
+                "old-host": { reach: "no-host" },
+            },
+        }),
     };
 
     const scenario = (SCENARIOS[params.get("scenario") || "default"] || SCENARIOS.default)();

@@ -78,7 +78,7 @@
         manifest: "Sein Manifest ließ sich nicht lesen.",
 
         emptyTitle: "Keine Add-ons mit Status",
-        emptyBody: "Noch hat keiner der Hosts ein Azentrius-Add-on, das seinen Status meldet.",
+        emptyBody: "Noch hat keiner der Hosts unten ein Azentrius-Add-on, das seinen Status meldet.",
         hostEmpty: "Auf diesem Host meldet kein Azentrius-Add-on seinen Status.",
 
         machinesFailed: "Die Liste des Host-Umschalters ließ sich nicht lesen",
