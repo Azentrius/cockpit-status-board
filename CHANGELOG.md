@@ -9,7 +9,7 @@ page.
   bridge's `cockpit.Machines`, merged from `/etc/cockpit/machines.d/*.json`), this host first.
   A tile shows the add-on's state in the status language, its most important figure, its summary
   and the age of its data; a click opens the add-on on its host.
-- **The status contract, version 1** (docs/INTERNALS.md). Add-ons are found by the section
+- **The status contract, version 1** (docs/STATUS-CONTRACT.md). Add-ons are found by the section
   `azentrius.status` in their manifest: on this host through `cockpit.manifests`, on the others
   through `find /usr/share/cockpit …` and the manifest files. Only commands below
   `/usr/lib/cockpit-` run, always as `COMMAND status --lang en|de`, with `superuser: "try"`.

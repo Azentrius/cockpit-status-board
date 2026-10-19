@@ -35,8 +35,8 @@ The hosts come from the host switcher's own list (the bridge's `cockpit.Machines
 connection string, so it uses the switcher's SSH connection, finds the add-ons by the section
 `azentrius.status` in their `manifest.json`, and runs `COMMAND status --lang en|de` with
 `superuser: "try"`. Everything a host sends is checked against the status contract and shown as
-plain text. [docs/INTERNALS.md](docs/INTERNALS.md) has the details, every call the page makes and
-the contract itself, for authors of add-ons.
+plain text. [docs/STATUS-CONTRACT.md](docs/STATUS-CONTRACT.md) is the contract itself, for authors
+of add-ons; [docs/INTERNALS.md](docs/INTERNALS.md) has the details and every call the page makes.
 
 ## Requirements
 

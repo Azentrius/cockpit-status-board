@@ -2,7 +2,7 @@
  *
  * The board reads three kinds of data: the host list of Cockpit's host switcher, the manifests
  * of the packages on each host, and the output of each add-on's `status` verb (the status
- * contract, docs/INTERNALS.md). All of it is data, never code: this file checks it, removes
+ * contract, docs/STATUS-CONTRACT.md). All of it is data, never code: this file checks it, removes
  * control characters, cuts every text to a fixed length and turns it into what the board shows.
  * Nothing here touches the DOM or Cockpit, so the unit tests load it in Node; the page sets every
  * text it takes from here with textContent.
