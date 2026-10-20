@@ -55,7 +55,7 @@ refused and shown as "Command refused". The manifest belongs to root and comes w
       "title": "Updates available",
       "value": "3",
       "detail": "postgres, glitchtip-web, caddy",
-      "link": "#/updates",
+      "link": "#/updates/update",
       "checked_at": "2026-10-19T18:36:00Z",
       "stale_after": 43200
     }
@@ -92,7 +92,17 @@ breaks and tabs become spaces, and the page sets it with `textContent` only.
 **An add-on that sets `link` must follow it while it is open.** Cockpit keeps a page's frame once
 it is loaded; a jump to `/PACKAGE#/place` then only changes `cockpit.location`, and the page does
 not load again. The page therefore listens to `cockpit.addEventListener("locationchanged", …)` and
-shows the place named there, not only the one it found when it started. Update Gaps does this.
+shows the place named there, not only the one it found when it started. Cron Jobs, Image Update
+Monitor and Update Gaps do this. Two more rules follow from it:
+
+- **A tab chosen on the page goes into the location** (`cockpit.location.go([tab])`). Otherwise the
+  location still names the place of the last link, and a second click on the same tile changes
+  nothing, so the page stays on the tab the user chose.
+- **Scroll only once the page is shown.** The location can change while the frame is still hidden
+  (`cockpit.hidden`; a page Cockpit preloaded or one the user left); scrolling then does nothing and
+  the link is lost. The page keeps the place and scrolls on `visibilitychange`.
+
+`test/fixtures/status/real-*.json` are the answers the three add-ons give, from their own verbs.
 
 **`status.json` is the add-on's own file.** Its format is up to the add-on (Update Gaps, for
 example, keeps the German texts in an extra field there); the board reads only what the verb
@@ -125,7 +135,8 @@ tile goes.
 ## Optional: a state in Cockpit's menu
 
 The same `status.json` can give the add-on's own menu entry a symbol, on the host whose menu is
-shown. Image Update Monitor does this since 0.21.0 (`plugin/menu-status.js`).
+shown. Image Update Monitor does this since 0.21.0 (`plugin/menu-status.js`), Update Gaps and Cron
+Jobs in the same way.
 
 - The page sets it with `cockpit.transport.control("notify", { page_status: { type, title } })`:
   `danger` becomes `error`, `warning` and `info` stay, `ok` and `none` send no symbol; the title is
@@ -134,6 +145,11 @@ shown. Image Update Monitor does this since 0.21.0 (`plugin/menu-status.js`).
 - `"preload": ["index"]` in the manifest loads that page hidden right after the login. While hidden
   it should only read `status.json` and send the symbol; the rest of the page starts when
   `cockpit.hidden` is false for the first time.
+- The symbol should say what the board would say for the same file: never better than an item, an
+  item older than its `stale_after` at least a warning (checked again when it turns old).
+- A page opened without the shell (`/cockpit/@localhost/PACKAGE/index.html`) may send `notify` all
+  the same: cockpit-ws drops a control message without a channel that it does not know
+  (`dispatch_inbound_command` in `src/ws/cockpitwebservice.c`, read on 2026-10-20).
 - Cockpit calls `notify` and `page_status` experimental; a successor is in the works
   (cockpit-project/cockpit pull request 23314, "notification boards").
 

@@ -34,6 +34,14 @@ const EXPECT = {
     "good-cronjobs-ok.de.json": { state: "ok", reported: "ok", items: 2, key: "failed-runs", value: "0" },
     "good-update-gaps.json": { state: "warning", reported: "warning", items: 4, key: "held", value: "2", link: "#/held" },
     "good-update-gaps.de.json": { state: "warning", reported: "warning", items: 4, key: "held", value: "2" },
+    /* What the add-ons answer, from their own verbs on the fixtures of their repositories (times
+       moved to just before NOW): the key figure and the place in the add-on its link opens. */
+    "real-cronjobs.json": { state: "danger", reported: "danger", items: 3, key: "failed", value: "1", link: "#/overview/results" },
+    "real-cronjobs.de.json": { state: "danger", reported: "danger", items: 3, key: "failed", value: "1", link: "#/overview/results" },
+    "real-image-updates.json": { state: "info", reported: "info", items: 5, key: "updates", value: "2", link: "#/updates/update" },
+    "real-image-updates.de.json": { state: "info", reported: "info", items: 5, key: "updates", value: "2", link: "#/updates/update" },
+    "real-update-gaps.json": { state: "warning", reported: "warning", items: 6, key: "held", value: "6", link: "#/held" },
+    "real-update-gaps.de.json": { state: "warning", reported: "warning", items: 6, key: "held", value: "6", link: "#/held" },
     "good-minimal.json": { state: "none", reported: "none", items: 0, key: null },
     /* says ok, but an item says danger: the board believes the item */
     "good-understated.json": { state: "danger", reported: "ok", items: 1, key: "cves", dropped: 2 },
