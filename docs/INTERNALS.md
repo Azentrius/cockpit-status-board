@@ -6,9 +6,9 @@ add-on has to send, and what the board accepts from it, is the **status contract
 
 The Cockpit code named here is that of Cockpit 360 (Ubuntu 26.04),
 `https://github.com/cockpit-project/cockpit/blob/360/<path>`. The board was written against it and
-tested against a stand-in for Cockpit (`test/web/mock-cockpit.js`) and, in CI, against a real
-Cockpit with SSH to the test machine itself (`test/e2e_cockpit.py`); see "Not proven yet" at the
-end.
+tested against a stand-in for Cockpit (`test/web/mock-cockpit.js`), in CI against a real Cockpit
+with SSH to the test machine itself (`test/e2e_cockpit.py`), and by hand on a bastion with real
+hosts; see "Tested against real Cockpit" at the end.
 
 ## Hosts
 
@@ -83,9 +83,20 @@ row keeps what it showed before.
 | read `/proc/sys/kernel/hostname` | every host | `host` |
 | `COMMAND status --lang xx` | every host with the add-on | `host`, `superuser: "try"`, `err: "message"` |
 | `cockpit.jump("/PKG" + link, host)`, `cockpit.jump("/system", host)` | the shell | (navigation) |
+| the meta tag `allow-multihost` in the shell's document (`window.parent`) | the browser | read once at the start |
 
 Nothing else: no shell scripts, no `superuser: "require"`, no writes. `test/page.test.js` and
 `test/ui_test.py` check this list.
+
+**Jumps to other hosts need the host switcher.** cockpit-ws writes `AllowMultiHost` into the shell's
+document as `<meta name="allow-multihost" content="yes|no">` (`src/ws/cockpitchannelresponse.c`),
+and the shell turns on its host switcher only for `yes` (`pkg/shell/state.tsx`, `init_config`).
+Without it the shell turns every location with another host into `localhost` and keeps path and
+fragment (`state.tsx`, `update`): a jump to `/update-gaps#/held` on another host would open the
+add-on of this host. The board reads the same meta tag; without `yes` the tiles of other hosts are
+no buttons, an alert says why, and the text for a locked key names `ssh-add` and a new login
+instead of the host switcher. A page without a shell around it, or one that cannot read the shell's
+document, keeps the jumps (`data-multihost="unknown"` on `#board`, which the tests read).
 
 ## Tiles
 
@@ -108,7 +119,11 @@ The tiles of a row are sorted by name, the same on every host, so the columns li
 named by the label its own host sends (else its manifest's menu label); the name used for sorting
 and for "Not installed" comes from the first host that has one, this host first. One host cannot
 rename another host's tiles. The row's header carries the most severe state of its add-on tiles as
-a strong label.
+a strong label; a row that could not be read carries its one tile's label instead (Unreachable,
+Key locked, Add-ons unreadable). The key figure stands on its own, its title below it as a caption:
+add-ons send titles such as "New versions" whatever the value, so "1" over "New versions" reads
+right where "1 New versions" would not. Without the host switcher only this host's tiles open
+something (see "Every call the page makes").
 
 ## Why a page of its own
 
@@ -128,31 +143,60 @@ contract does not change for that.
 The board is a package of its own, not a tab in one of the add-ons: it has no root helper, it
 belongs only on the host with the host switcher, and it works with whichever add-ons are installed.
 
-## Not proven yet
+## Tested against real Cockpit
 
-Derived from the code of Cockpit 360 and tested against the stand-in only:
+What this file derives from the code of Cockpit 360 is checked in two ways.
+
+**In CI**, the end-to-end test (`test/e2e_cockpit.py`, job `e2e`) runs against Cockpit from the
+Ubuntu 24.04 backports, with `AllowMultiHost` on. The other hosts are the test machine itself under
+other names, over SSH with a key in an ssh-agent, an encrypted key that is not in the agent, and a
+closed port. It checks:
 
 - that `cockpit.spawn()`, `cockpit.file()` and the echo channel with `host` reach the other hosts
-  through the bastion's bridge, with the switcher's connection, with `AllowMultiHost` on and off;
-- that a locked key arrives as `error: "locked identity: …"` in the close options of the echo channel;
-- that `cockpit.file()` reads `/proc/sys/kernel/hostname` on the other hosts;
-- what the shell shows after `cockpit.jump()` to a host it is not connected to (`jump()` opens no
-  connection, `pkg/shell/state.tsx`). From the code: it asks "Connect to HOST?" once per browser
-  session (`pkg/shell/hosts_dialog.jsx`, `connect_host`), then connects and opens the page.
+  through the bridge, `/proc/sys/kernel/hostname` included;
+- that a locked key arrives as `error: "locked identity: …"` in the close options of the echo
+  channel;
+- that the board, Refresh and the shell share one SSH connection per host (it counts connections
+  and logins);
+- what the shell does after `cockpit.jump()` to a host it is not connected to (`jump()` opens no
+  connection, `pkg/shell/state.tsx`): it asks "Connect to HOST?" once (`pkg/shell/hosts_dialog.jsx`,
+  `connect_host`), then connects and opens the page;
+- that the board finds the shell's meta tag `allow-multihost`.
 
-The end-to-end test (`test/e2e_cockpit.py`, job `e2e`) checks these four against Cockpit from the
-Ubuntu 24.04 backports, with `AllowMultiHost` on: the other hosts are the test machine itself
-under other names, over SSH with a key in an ssh-agent, an encrypted key that is not in the agent,
-and a closed port. It counts the SSH connections and logins, so it also shows whether the shell's
-connection to a host is the board's. What remains for the bastion: real hosts, keys that
-`pam_ssh_add` loads at login, and `AllowMultiHost` off.
+### Tested on a bastion
+
+On 2026-10-20, by hand, the README's seven steps ("Trying it on the bastion") ran on a bastion with
+Cockpit 360 and three hosts behind it, reached over SSH (Cockpit 360 and 362, Ubuntu 24.04 and
+26.04), with the key that `pam_ssh_add` unlocks at login:
+
+1. The rows match the switcher's hosts. The switcher names a host by its address (its entry in
+   `machines.d` has no `label`) until it has connected to it, then by the host name from hostnamed
+   (`pkg/shell/machines/machines.js`); the board names it by `/proc/sys/kernel/hostname` from the
+   start. Both sort by name; the board puts this host first.
+2. The board opens one SSH connection per host, and opening the host in the switcher afterwards
+   adds none. The bridge keeps a master per host, `ssh -M -N -S SOCKET … -- HOST`, and runs
+   `ssh -S SOCKET cockpit-bridge` over it.
+3. Clicks open the add-ons on their hosts, at the key item's link.
+4. No password prompt; on the other hosts the status verbs run without administrative access.
+5. An address that never answers (`192.0.2.10`, in a file in `machines.d`, which the bridge reads
+   again at once) turns "Unreachable" with "No answer within 20 seconds" after 20 seconds; the other
+   rows are done before.
+6. After `ssh-add -D` in Cockpit's terminal, which uses the session's agent, the other hosts show
+   "Key locked" with the key file. Unlocking the key in the host switcher (the shell asks for the
+   passphrase) brings the host back on Refresh.
+7. With `AllowMultiHost = false` the board still reads every host, but a click on another host's
+   tile opened the add-on of the bastion: the shell keeps path and fragment and swaps the host for
+   `localhost`. Since then the board reads `allow-multihost` and leaves those tiles inert (see
+   "Every call the page makes").
+
+Still derived only: the board's reaction to `AllowMultiHost` off is tested against the stand-in
+(`/shell.html` in `test/serve.py`); and the texts for an unknown or changed host key point to the
+host switcher also when Cockpit runs without it.
 
 Read from the code as well: neither the shell's router (`pkg/shell/router.jsx`, which passes a
 frame's channels on unchanged) nor `cockpit-ws` checks the `host` of a channel, and the bridge
 always routes it (`src/cockpit/bridge.py`, `HostRoutingRule`). `AllowMultiHost` only decides
 whether the shell shows the host switcher and whether `cockpit-ws` serves the pages of other hosts
-(`/@HOST/…`). Without it the board still reads every host, but a jump to another host cannot load
-that host's page. The board connects without the shell's warning before connecting to a host
-(`WarnBeforeConnecting`): it loads no page and no JavaScript from there, only JSON.
-
-The README's "Trying it on the bastion" lists the steps.
+(`/@HOST/…`, else 403, `src/ws/cockpitchannelresponse.c`). The board connects without the shell's
+warning before connecting to a host (`WarnBeforeConnecting`): it loads no page and no JavaScript
+from there, only JSON.

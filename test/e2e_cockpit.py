@@ -10,7 +10,8 @@ real Cockpit what docs/INTERNALS.md derives from its code:
   - a key that is encrypted and not in the agent shows as "Key locked", a closed port as
     "Unreachable";
   - a click on a tile opens the add-on on its host at the key item's link; for a host the shell
-    is not connected to yet, after the shell asks.
+    is not connected to yet, after the shell asks;
+  - the board finds AllowMultiHost in the shell's document (the meta tag allow-multihost).
 
 The other hosts are this machine under other names. It changes the machine, so the job e2e in
 .github/workflows/test.yml sets it up on the runner's throwaway VM:
@@ -253,6 +254,8 @@ with sync_playwright() as p:
           "this host first, then the hosts of machines.d: " + repr(r))
     alerts = b.inner_text("#alerts").strip()
     check(alerts == "", "no alert about the host list: " + alerts)
+    multihost = b.evaluate("document.querySelector('#board').dataset.multihost")
+    check(multihost == "yes", "the board reads AllowMultiHost from the shell's meta tag allow-multihost: " + repr(multihost))
     meta = b.inner_text("#meta")
     check(meta.endswith(" · 4 hosts"), "the header counts the hosts: " + meta)
 

@@ -44,9 +44,12 @@ button.sb-tile { cursor: pointer; appearance: none; }
 button.sb-tile:hover { background: var(--bg-hover); }
 .sb-tile__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-xs) var(--space-sm); }
 .sb-tile__name { font-weight: 600; overflow-wrap: anywhere; }
-.sb-tile__metric { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-sm); min-inline-size: 0; }
+/* Below a long name the label keeps to the right, as on every other tile. */
+.sb-tile__head > .az-label { margin-inline-start: auto; }
+/* The key figure, then its title as a caption: "1" over "New versions", never "1 New versions". */
+.sb-tile__metric { display: flex; flex-direction: column; align-items: flex-start; min-inline-size: 0; }
 .sb-tile__value { font-size: 24px; line-height: 1.2; font-weight: 500; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.sb-tile__title { overflow-wrap: anywhere; }
+.sb-tile__title { font-size: 14px; overflow-wrap: anywhere; }
 .sb-tile__text { color: var(--text-subtle); font-size: 14px; overflow-wrap: anywhere; }
 .sb-tile__meta { margin-block-start: auto; padding-block-start: var(--space-xs); color: var(--text-subtle); font-size: 12px; overflow-wrap: anywhere; }
 .sb-tile__go { color: var(--link); font-size: 14px; }

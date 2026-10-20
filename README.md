@@ -13,9 +13,10 @@ and changes nothing on any host; a click on a tile opens the add-on on its host.
 
 - **One row per host,** in the order of the host switcher, this host first. The row's header names
   the host, the connection when it differs (`stefan@public-host`, `claw-host:2222`) and the most
-  severe state of its add-ons.
+  severe state of its add-ons, or why the host cannot be read ("Unreachable", "Key locked").
 - **One tile per add-on:** its state in the status language (OK, Notice, Warning, Problem, Unknown),
-  its most important figure ("3 Updates available"), its summary and the age of its data. The
+  its most important figure with its title below it ("3" over "Updates available"), its summary
+  and the age of its data. The
   tiles stand in the same order on every host, so gaps show: an add-on that runs on one host but
   is missing on another gets a neutral tile "Not installed" there.
 - **What cannot be read says so:** a host that does not answer ("Unreachable", with Cockpit's
@@ -42,8 +43,9 @@ of add-ons; [docs/INTERNALS.md](docs/INTERNALS.md) has the details and every cal
 
 - On the host with the board: Cockpit with the host switcher; developed against Cockpit 360. To
   read the other hosts the board does not need `AllowMultiHost`: it reaches them through the
-  bridge. To open an add-on on another host with a click, the shell does need it, as it loads the
-  pages of other hosts only with `AllowMultiHost`.
+  bridge. To open an add-on on another host with a click, the shell does need it: without it the
+  shell opens every page on this host, so the tiles of other hosts open nothing then, and the
+  board says why.
 - On the other hosts: `cockpit-bridge`, a login by SSH key (the key unlocked in the agent, as
   `pam_ssh_add` does it at login, and the host key known), and the add-ons in a version with the
   status contract.
@@ -81,23 +83,30 @@ Cockpit again.
 The parts that reach other hosts are written from Cockpit's code; the end-to-end test (see
 Development) checks them against a real Cockpit, with SSH to the test machine itself. Real hosts,
 `pam_ssh_add` and the switcher's own connections show only on the bastion. On the host with the
-host switcher, check once:
+host switcher, check once (all seven passed on a bastion with three hosts on 2026-10-20; see
+[docs/INTERNALS.md](docs/INTERNALS.md#tested-on-a-bastion)):
 
-1. The rows are the hosts of the switcher, in its order, with the same names.
+1. The rows are the hosts of the switcher, in its order, with the same names (the switcher names a
+   host by its address until it has connected to it).
 2. For a host with the add-ons: the tiles appear, and on the bastion `pgrep -af "ssh.*HOST"` lists
    one connection to it after the host was also opened in the switcher (the board shares the
-   switcher's connection).
+   switcher's connection). Each connection is two `ssh` processes: the master
+   `ssh -M -N -S SOCKET … -- HOST`, which the pattern finds, and `ssh -S SOCKET cockpit-bridge`.
 3. A click on a tile opens the add-on on that host, at the right tab; a click on "Unreachable"
    opens the host's Overview.
 4. Without administrative access on a host: the tiles show what the add-ons report without root,
    and Cockpit asks for no password.
 5. A host that is switched off shows "Unreachable" within 20 seconds; the other rows are not held
-   up.
-6. With the key out of the session's agent (`ssh-add -D` in Cockpit's terminal on the bastion) and
-   an encrypted key file, a host that has no connection yet shows "Key locked" after Refresh. Log
-   in to Cockpit again to get the key back.
+   up. Without switching a host off: a file in `/etc/cockpit/machines.d` with an address that
+   never answers, such as `192.0.2.10` (the bridge reads the folder again at once; remove the
+   file afterwards).
+6. With the key out of the session's agent (`ssh-add -D` in Cockpit's terminal on the bastion, in
+   a session in which the board has not connected yet) and an encrypted key file, the other hosts
+   show "Key locked". Unlocking the key in the host switcher, or logging in to Cockpit again,
+   brings it back.
 7. Optionally, with `AllowMultiHost` switched off in `/etc/cockpit/cockpit.conf` (and Cockpit
-   restarted): the board still reads the hosts; clicks on their tiles cannot open their pages.
+   restarted): the board still reads the hosts, says that Cockpit runs without the host switcher,
+   and the tiles of other hosts open nothing (the shell would open the add-on of this host).
 
 ## Safety
 
