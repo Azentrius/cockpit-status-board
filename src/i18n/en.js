@@ -49,6 +49,7 @@
         noaccessText: "Without administrative access on this host the add-on has nothing to report.",
         rejectedText: "Its manifest names a status command outside `/usr/lib/cockpit-…`. The board does not run it.",
         lockedText: "Your SSH key is locked. Log in to this host once in the host switcher to unlock it.",
+        lockedTextNoSwitcher: "Your SSH key is locked. Log in to Cockpit again, or unlock it with `ssh-add` in Cockpit's terminal.",
         discoveryText: "The packages on this host could not be listed.",
 
         /* Why a host could not be reached, by Cockpit's problem code. */
@@ -89,6 +90,8 @@
         machinesFailed: "The host switcher's list could not be read",
         machinesFailedBody: "The board shows this host only.",
         skipped: names => `Left out of the host list (not a plain host name): ${names}`,
+        noSwitcher: "Without the host switcher",
+        noSwitcherBody: "Cockpit runs without `AllowMultiHost` and opens pages of this host only. The board still reads every host, but the tiles of other hosts open nothing.",
     };
 
     const texts = { locale: "en-US", ui };

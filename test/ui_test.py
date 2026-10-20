@@ -117,6 +117,33 @@ def no_problems(page, what):
     check(not page.problems, "no console problems (" + what + "): " + repr(page.problems))
 
 
+def labels_right(page):
+    """The tiles whose label does not stand at the right edge of the tile's head."""
+    return page.evaluate("""() => Array.from(document.querySelectorAll('.sb-tile__head')).filter(hd => {
+        const l = hd.querySelector('.az-label');
+        return l && Math.abs(l.getBoundingClientRect().right - hd.getBoundingClientRect().right) > 1;
+    }).map(hd => hd.closest('.sb-tile').dataset.key)""")
+
+
+SHELL_FRAME = "cockpit1:localhost/status-board"
+
+
+def open_in_shell(browser, multihost):
+    """The board in the frame of a stand-in for Cockpit's shell (test/serve.py, /shell.html), whose
+    document carries the meta tag allow-multihost as cockpit-ws writes it from AllowMultiHost.
+    Returns the shell's page and the board's frame."""
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900}, timezone_id="Europe/Berlin", locale="de-DE")
+    page = ctx.new_page()
+    page.problems = []
+    page.on("console", lambda m: page.problems.append(m.text) if m.type in ("error", "warning") else None)
+    page.on("pageerror", lambda e: page.problems.append("pageerror: " + str(e)))
+    page.clock.install(time=NOW)
+    page.goto(f"http://127.0.0.1:{PORT}/shell.html?multihost={multihost}")
+    frame = page.frame(name=SHELL_FRAME)
+    wait_idle(frame)
+    return page, frame
+
+
 LABEL = {"none": "az-label", "ok": "az-label az-label--success", "info": "az-label az-label--info",
          "warning": "az-label az-label--warning", "danger": "az-label az-label--danger"}
 
@@ -159,6 +186,13 @@ with sync_playwright() as p:
           and "Stand vor 10 Minuten" in t, "the tile: name, key figure, summary, age: " + t)
     check(page.evaluate("""() => document.querySelector('[data-key="public-host/cronjobs"] .sb-tile__value').innerText""") == "2",
           "the key figure stands on its own")
+    caption = page.evaluate("""() => { const t = document.querySelector('[data-key="public-host/cronjobs"]');
+        const v = t.querySelector('.sb-tile__value').getBoundingClientRect(), n = t.querySelector('.sb-tile__title').getBoundingClientRect();
+        return [n.top >= v.bottom - 1, Math.abs(n.left - v.left) <= 1]; }""")
+    check(caption == [True, True], "the key figure's title stands below it as a caption, not after it as a sentence: " + repr(caption))
+    check(labels_right(page) == [], "every label stands at the right edge of its tile: " + repr(labels_right(page)))
+    check(page.evaluate("document.querySelector('#board').dataset.multihost") == "unknown",
+          "without a shell around it the page does not know AllowMultiHost and keeps the jumps")
     check(tile_label(page, "public-host/image-updates") == [LABEL["info"], "Hinweis", True], "updates are a notice")
     check(tile_label(page, "public-host/update-gaps") == [LABEL["warning"], "Achtung", True], "held packages are a warning")
     check(host_label(page, "public-host") == [LABEL["danger"] + " az-label--strong", "Problem"], "the host's overall state: " + repr(host_label(page, "public-host")))
@@ -183,10 +217,13 @@ with sync_playwright() as p:
     t = tile_text(page, "old-host/unreachable")
     check(tile_label(page, "old-host/unreachable") == [LABEL["danger"], "Nicht erreichbar", True] and "Verbindung" in t and
           "Der Host ist nicht erreichbar." in t and "[Errno -2]" in t and "Host öffnen" in t, "an unreachable host: " + t)
-    check(host_label(page, "old-host") is None, "no overall label next to a host that cannot be read")
+    check(host_label(page, "old-host") == [LABEL["danger"] + " az-label--strong", "Nicht erreichbar"],
+          "a host that cannot be reached says so next to its name: " + repr(host_label(page, "old-host")))
     t = tile_text(page, "locked-host/locked")
     check(tile_label(page, "locked-host/locked") == [LABEL["warning"], "Schlüssel gesperrt", True] and "/home/stefan/.ssh/id_ed25519" in t
           and "Host-Umschalter" in t, "a locked SSH key: " + t)
+    check(host_label(page, "locked-host") == [LABEL["warning"] + " az-label--strong", "Schlüssel gesperrt"],
+          "and so does a locked key: " + repr(host_label(page, "locked-host")))
     shot(page, "board")
     no_problems(page, "board")
 
@@ -282,6 +319,40 @@ with sync_playwright() as p:
     no_problems(page, "board after reloads")
     page.context.close()
 
+    # ---------- in the shell: with and without the host switcher (AllowMultiHost) ----------
+    # Without it the shell turns a jump to another host into one to this host with the same path
+    # (pkg/shell/state.tsx), so a tile of another host would open this host's add-on.
+    shell, f = open_in_shell(browser, "no")
+    check(f.evaluate("document.querySelector('#board').dataset.multihost") == "no", "the page reads the shell's meta tag")
+    alerts = f.inner_text("#alerts")
+    check("Ohne Host-Umschalter" in alerts and "AllowMultiHost" in alerts and "öffnen nichts" in alerts,
+          "says why the tiles of other hosts open nothing: " + alerts)
+    kinds = dict(f.evaluate("() => Array.from(document.querySelectorAll('.sb-tile')).map(t => [t.dataset.key, t.tagName])"))
+    other = sorted(k for k, tag in kinds.items() if not k.startswith("localhost/") and tag == "BUTTON")
+    check(not other and kinds.get("localhost/cronjobs") == "BUTTON",
+          "only this host's tiles are buttons: " + repr(other) + " " + repr(kinds.get("localhost/cronjobs")))
+    for key in ("public-host/image-updates", "old-host/unreachable", "locked-host/locked", "localhost/cronjobs"):
+        tile(f, key).click()
+    check(mock(f, "jumps") == [["/cronjobs", None]], "only this host's add-ons open: " + json.dumps(mock(f, "jumps")))
+    t = tile_text(f, "old-host/unreachable")
+    check("Host öffnen" not in t and "Der Host ist nicht erreichbar." in t, "an unreachable host offers nothing to open: " + t)
+    t = tile_text(f, "locked-host/locked")
+    check("ssh-add" in t and "Host-Umschalter" not in t and "Host öffnen" not in t, "a locked key, without the host switcher: " + t)
+    check("Problem" in tile_text(f, "public-host/cronjobs"), "the other hosts are still read")
+    shot(shell, "board-no-switcher")
+    no_problems(shell, "without the host switcher")
+    shell.context.close()
+
+    shell, f = open_in_shell(browser, "yes")
+    check(f.evaluate("document.querySelector('#board').dataset.multihost") == "yes" and f.inner_text("#alerts").strip() == "",
+          "with the host switcher: no alert")
+    tile(f, "public-host/image-updates").click()
+    tile(f, "old-host/unreachable").click()
+    check(mock(f, "jumps") == [["/image-updates#/updates", "public-host"], ["/system", "old-host"]],
+          "with the host switcher the tiles of other hosts open their add-on: " + json.dumps(mock(f, "jumps")))
+    no_problems(shell, "with the host switcher")
+    shell.context.close()
+
     # ---------- invalid names in the host list ----------
     page = open_page(browser, "badhosts=1")
     alerts = page.inner_text("#alerts")
@@ -313,6 +384,7 @@ with sync_playwright() as p:
     name = page.inner_text('[data-key="evil-host/update-gaps"] .sb-tile__name')
     check(len(name) == 60 and name.endswith("…") and "31 Einträge ausgelassen (ungültig)" in tile_text(page, "evil-host/update-gaps"),
           "long texts are cut, invalid items counted: " + name)
+    check(labels_right(page) == [], "below a long name the label keeps to the right: " + repr(labels_right(page)))
     check(page.inner_text('[data-key="bidi-host/update-gaps"] .sb-tile__name') == "Updatespag Gaps", "bidirectional controls are gone")
     text = page.inner_text("body")
     check(not any(c in text for c in INVISIBLE), "no invisible characters on the page")
@@ -342,6 +414,8 @@ with sync_playwright() as p:
     check(page.evaluate("""() => document.querySelector('[data-key="nobridge-host/unreachable"] code').innerText""") == "cockpit-bridge",
           "code in the page's own texts")
     check(tile_label(page, "dark-host/discovery") == [LABEL["warning"], "Add-ons nicht lesbar", True], "find failed")
+    check(host_label(page, "dark-host") == [LABEL["warning"] + " az-label--strong", "Add-ons nicht lesbar"],
+          "the row says it next to the host's name: " + repr(host_label(page, "dark-host")))
     no_problems(page, "broken")
     page.context.close()
 

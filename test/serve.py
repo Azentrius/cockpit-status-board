@@ -3,11 +3,15 @@
 manifests.js, with Cockpit's CSP. The stand-in for cockpit.js gets the fixtures in front of it
 (window.__FIXTURES), the page's own manifest among them. Nothing else: a file the page takes
 from elsewhere fails here as it would on a server that lacks it.
+/shell.html?multihost=yes|no stands in for Cockpit's shell: the board in a frame, and the meta tag
+allow-multihost that cockpit-ws writes into the shell's document from AllowMultiHost.
 Run: python3 test/serve.py [PORT]"""
+import html
 import http.server
 import json
 import os
 import sys
+from urllib.parse import parse_qs, urlsplit
 
 here = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(os.path.dirname(here), "src")
@@ -35,9 +39,21 @@ def mock(name):
         return f.read()
 
 
+def shell(query):
+    """The shell's document: the meta tag as cockpit-ws writes it, the board in the shell's frame."""
+    multihost = "yes" if parse_qs(query).get("multihost") == ["yes"] else "no"
+    return ("<!doctype html>\n<html><head><meta charset=\"utf-8\">"
+            f"<meta name=\"allow-multihost\" content=\"{multihost}\"><link rel=\"icon\" href=\"data:,\">"
+            "<title>Cockpit</title></head>\n"
+            "<body><iframe name=\"cockpit1:localhost/status-board\" width=\"1260\" height=\"2400\" "
+            f"src=\"/pkg/status-board/index.html?{html.escape(query)}\"></iframe></body></html>\n").encode()
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split("?")[0]
+        if path == "/shell.html":
+            return self.send(shell(urlsplit(self.path).query), ".html")
         if path == "/pkg/base1/cockpit.js":
             data = ("window.__FIXTURES = " + json.dumps(fixtures()) + ";\n").encode() + mock("mock-cockpit.js")
             return self.send(data, ".js")

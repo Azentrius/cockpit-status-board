@@ -46,6 +46,7 @@
         noaccessText: "Ohne Administratorzugriff auf diesem Host hat das Add-on nichts zu melden.",
         rejectedText: "Sein Manifest nennt einen Status-Befehl außerhalb von `/usr/lib/cockpit-…`. Das Board führt ihn nicht aus.",
         lockedText: "Ihr SSH-Schlüssel ist gesperrt. Melden Sie sich einmal im Host-Umschalter an diesem Host an, um ihn zu entsperren.",
+        lockedTextNoSwitcher: "Ihr SSH-Schlüssel ist gesperrt. Melden Sie sich neu bei Cockpit an oder entsperren Sie ihn im Terminal von Cockpit mit `ssh-add`.",
         discoveryText: "Die Pakete auf diesem Host ließen sich nicht auflisten.",
 
         reach: {
@@ -84,6 +85,8 @@
         machinesFailed: "Die Liste des Host-Umschalters ließ sich nicht lesen",
         machinesFailedBody: "Das Board zeigt nur diesen Host.",
         skipped: names => `Aus der Hostliste ausgelassen (kein einfacher Hostname): ${names}`,
+        noSwitcher: "Ohne Host-Umschalter",
+        noSwitcherBody: "Cockpit läuft ohne `AllowMultiHost` und öffnet nur Seiten dieses Hosts. Das Board liest trotzdem alle Hosts, aber die Kacheln anderer Hosts öffnen nichts.",
     };
 
     const texts = { locale: "de-DE", ui };

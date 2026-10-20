@@ -70,6 +70,14 @@ t("the only commands the page runs", () => {
     assert.ok(!/cockpit\.script\(/.test(app), "no shell scripts");
 });
 
+/* Without AllowMultiHost the shell opens a jump to another host on this host (pkg/shell/state.tsx). */
+t("jumps to other hosts only with the host switcher", () => {
+    assert.ok(app.includes("window.parent.document.head.querySelector(\"meta[name='allow-multihost']\")"),
+        "reads the shell's meta tag allow-multihost, as the shell does");
+    assert.ok(app.includes("if (!host.own && !OTHER_HOSTS) return;"), "jumpTo refuses other hosts without it");
+    assert.ok(app.includes("const go = !!tile.jump && (host.own || OTHER_HOSTS);"), "tiles of other hosts are no buttons without it");
+});
+
 t("manifest.json", () => {
     const m = JSON.parse(read("manifest.json"));
     assert.strictEqual(m.menu.index.label, "Status Board");

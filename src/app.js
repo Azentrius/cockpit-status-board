@@ -8,8 +8,9 @@
  *      `find /usr/share/cockpit …` and cockpit.file() for each manifest.json,
  *   3. runs each add-on's status verb, `COMMAND status --lang xx`, with superuser "try",
  * and checks every answer with lib/status.js. What a host sends is data: its texts reach the page
- * through textContent only, and the page jumps only to checked package folders and links. The
- * board never asks for administrative access and changes nothing on any host.
+ * through textContent only, and the page jumps only to checked package folders and links, to other
+ * hosts only while the shell has its host switcher (AllowMultiHost). The board never asks for
+ * administrative access and changes nothing on any host.
  *
  * It loads on opening, on Refresh and, while the page is visible, every 5 minutes. It asks again
  * instead of watching files: cockpit.file().watch() ignores the host option and would watch the
@@ -129,6 +130,24 @@
 
     /* ---------- Cockpit ---------- */
 
+    /* Whether the shell opens pages of other hosts: "yes", "no", or "unknown" when the page has no
+       shell around it or cannot read its document. The shell decides by the meta tag
+       allow-multihost that cockpit-ws writes into the shell's document from AllowMultiHost
+       (src/ws/cockpitchannelresponse.c). Without "yes" it has no host switcher and turns every
+       jump to another host into one to this host, with the same path (pkg/shell/state.tsx,
+       init_config and update): a click on another host's tile would open the add-on of this host. */
+    function shellOpensOtherHosts() {
+        try {
+            if (window.parent === window) return "unknown";
+            const meta = window.parent.document.head.querySelector("meta[name='allow-multihost']");
+            return meta && meta.content === "yes" ? "yes" : "no";
+        } catch (_) {
+            return "unknown";
+        }
+    }
+    const MULTIHOST = shellOpensOtherHosts();
+    const OTHER_HOSTS = MULTIHOST !== "no";
+
     /* Channel options for a host: none for this host, else its connection string. */
     const at = (host, options) => (host ? Object.assign({ host }, options) : options);
 
@@ -247,6 +266,7 @@
             alerts.push({ kind: "machines", message: SB.cleanText(String((ex && (ex.message || ex.problem)) || ""), SB.LIMITS.reason) });
         }
         if (list.skipped.length) alerts.push({ kind: "skipped", names: list.skipped });
+        if (!OTHER_HOSTS && list.hosts.length) alerts.push({ kind: "noswitcher" });
 
         /* Until a host has answered again, its row shows what it showed before. */
         const before = new Map(state.hosts.map(x => [x.key, x.result]));
@@ -281,6 +301,12 @@
 
     function renderAlerts() {
         fill($("alerts"), state.alerts.map(a => {
+            if (a.kind === "noswitcher") {
+                return h("div", { class: "az-alert", role: "status" },
+                    h("span", { class: "az-alert__icon" }, icon("info-circle")),
+                    h("p", { class: "az-alert__title" }, T.noSwitcher),
+                    h("p", { class: "az-alert__body" }, rich(T.noSwitcherBody)));
+            }
             const title = a.kind === "machines" ? T.machinesFailed : T.skipped(a.names.join(", "));
             const body = a.kind === "machines" ? [T.machinesFailedBody, a.message].filter(Boolean).join(" ") : null;
             return h("div", { class: "az-alert az-alert--warning", role: "status" },
@@ -331,7 +357,9 @@
         return parts;
     }
 
-    function tileParts(tile) {
+    /* go: a click on the tile opens something */
+    function tileParts(tile, go) {
+        const toHost = go ? h("span", { class: "sb-tile__go" }, T.toHost) : null;
         switch (tile.kind) {
         case "status": return statusParts(tile);
         case "missing": return [text(T.missingText)];
@@ -341,16 +369,17 @@
         case "error": return [text(rich(errorText(tile.error))), tile.error.message ? meta(tile.error.message) : null];
         case "unreachable":
             return [text(rich(own(T.reach, tile.problem) ? T.reach[tile.problem] : T.reach.other)),
-                    tile.message ? meta(tile.message) : null, h("span", { class: "sb-tile__go" }, T.toHost)];
+                    tile.message ? meta(tile.message) : null, toHost];
         case "locked":
-            return [text(T.lockedText), tile.identity ? meta(h("code", null, tile.identity)) : null,
-                    h("span", { class: "sb-tile__go" }, T.toHost)];
+            return [text(rich(OTHER_HOSTS ? T.lockedText : T.lockedTextNoSwitcher)),
+                    tile.identity ? meta(h("code", null, tile.identity)) : null, toHost];
         case "discovery": return [text(T.discoveryText), tile.message ? meta(tile.message) : null];
         default: return [];
         }
     }
 
     function jumpTo(host, tile) {
+        if (!host.own && !OTHER_HOSTS) return;
         if (tile.jump === "host") {
             cockpit.jump("/system", host.key);
             return;
@@ -365,11 +394,20 @@
     function renderTile(host, tile) {
         const key = host.key + "/" + (tile.pkg || tile.kind);
         if (tile.kind === "loading") return h("div", { class: "az-card sb-tile", "data-key": key }, text(T.loading));
+        /* Without the host switcher the shell would open another host's add-on on this host. */
+        const go = !!tile.jump && (host.own || OTHER_HOSTS);
         const parts = [h("span", { class: "sb-tile__head" },
             h("span", { class: "sb-tile__name" }, tile.pkg ? tile.label : T.connection),
-            label(tile.state, T.words[tile.word])), tileParts(tile)];
-        if (!tile.jump) return h("div", { class: "az-card sb-tile", "data-key": key }, parts);
+            label(tile.state, T.words[tile.word])), tileParts(tile, go)];
+        if (!go) return h("div", { class: "az-card sb-tile", "data-key": key }, parts);
         return h("button", { class: "az-card sb-tile", type: "button", "data-key": key, onclick: () => jumpTo(host, tile) }, parts);
+    }
+
+    /* The row's label: the most severe state of its add-ons, or why the host could not be read. */
+    function rowLabel(row) {
+        if (row.tiles.some(t => t.pkg)) return row.state !== "none" ? label(row.state, T.words[row.state], true) : null;
+        const fault = row.tiles.find(t => t.kind === "unreachable" || t.kind === "locked" || t.kind === "discovery");
+        return fault ? label(fault.state, T.words[fault.word], true) : null;
     }
 
     /* quiet: no note for a row without tiles (the empty state above says it for all rows) */
@@ -377,12 +415,11 @@
         const host = row.host;
         const id = "host-" + index;
         const sub = host.own ? T.thisHost : (host.connection !== host.label ? host.connection : null);
-        const addons = row.tiles.some(t => t.pkg);
         return h("section", { class: "sb-host", "aria-labelledby": id, "data-host": host.key },
             h("div", { class: "sb-host__header" },
                 h("h2", { class: "sb-host__title", id }, host.label),
                 sub ? h("span", { class: "az-meta" }, sub) : null,
-                addons && row.state !== "none" ? label(row.state, T.words[row.state], true) : null),
+                rowLabel(row)),
             row.tiles.length ? h("div", { class: "sb-tiles" }, row.tiles.map(t => renderTile(host, t)))
                 : quiet ? null : h("p", { class: "sb-note" }, T.hostEmpty));
     }
@@ -423,6 +460,8 @@
 
     function init() {
         translateStatic();
+        /* for the tests: what the page found in the shell's document */
+        $("board").dataset.multihost = MULTIHOST;
         $("refresh").addEventListener("click", () => load());
 
         const visible = () => !(cockpit.hidden !== undefined ? cockpit.hidden : document.hidden);
