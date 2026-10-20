@@ -198,9 +198,12 @@ Cockpit 360 and three hosts behind it, reached over SSH (Cockpit 360 and 362, Ub
    `known_hosts` under that name, turns "Unreachable" with the text for an unknown host key that
    names `ssh` in Cockpit's terminal.
 
-Still derived only: the text for a changed host key (`invalid-hostkey`) is tested against the
-stand-in alone, and whether `ssh HOST` in the terminal is all it takes for the board to reach a
-host with an unknown key was not tried on the bastion.
+The host key texts without the host switcher, also on 2026-10-20: a second test host `127.0.0.2`,
+with a wrong key for it in the user's `known_hosts`, shows the text for a changed host key (the
+bridge reports `invalid-hostkey` for the board's own connections too). Following the texts in
+Cockpit's terminal, `ssh 127.0.0.1`, `ssh-keygen -R 127.0.0.2` and `ssh 127.0.0.2`, each with the
+key accepted, was all it took: after Refresh both hosts got past the host key to the login (which
+the bastion refused there, as its key is not authorized on itself).
 
 Read from the code as well: neither the shell's router (`pkg/shell/router.jsx`, which passes a
 frame's channels on unchanged) nor `cockpit-ws` checks the `host` of a channel, and the bridge
