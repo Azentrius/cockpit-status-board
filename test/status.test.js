@@ -232,6 +232,19 @@ t("the state of the items (contract, States)", () => {
     assert.strictEqual(s("info", "danger", "warning"), "danger");
 });
 
+t("every state has a label that the shared design files style", () => {
+    const css = fs.readFileSync(path.join(__dirname, "..", "src", "azentrius.css"), "utf8");
+    assert.deepStrictEqual(Object.keys(SB.LABEL_CLASS).sort(), SB.STATES.slice().sort());
+    for (const state of SB.STATES) {
+        const classes = SB.LABEL_CLASS[state].split(" ");
+        assert.strictEqual(classes[0], "az-label", state);
+        for (const cls of classes) {
+            assert.ok(new RegExp("\\." + cls + "\\s*\\{").test(css), state + ": azentrius.css has no rule for ." + cls);
+        }
+    }
+    assert.strictEqual(SB.LABEL_CLASS.ok, "az-label az-label--success", "ok is the status language's good");
+});
+
 t("the most important item", () => {
     const st = SB.validateStatus(JSON.stringify({ schema: 1, addon: "x", state: "warning", items: [
         { id: "a", state: "warning", title: "A" },

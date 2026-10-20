@@ -116,7 +116,7 @@ jobs:
           dpkg-query -W cockpit-ws cockpit-bridge openssh-server
           sudo ln -sfn "$GITHUB_WORKSPACE/src" /usr/share/cockpit/status-board
           sudo install -d /usr/share/cockpit/e2e /usr/lib/cockpit-e2e
-          sudo install -m 644 test/e2e/addon/manifest.json test/e2e/addon/index.html /usr/share/cockpit/e2e/
+          sudo install -m 644 test/e2e/addon/manifest.json test/e2e/addon/index.html test/e2e/addon/probe.js /usr/share/cockpit/e2e/
           sudo install -m 755 test/e2e/addon/status /usr/lib/cockpit-e2e/status
           /usr/lib/cockpit-e2e/status status --lang en | python -m json.tool
       - name: Check tools (pinned in test/requirements.txt) and the browser

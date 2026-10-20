@@ -99,7 +99,7 @@
     }
     /* A label of the status language: colour, icon and word say the same. */
     function label(state, word, strong) {
-        const cls = "az-label" + (state === "none" ? "" : " az-label--" + state) + (strong ? " az-label--strong" : "");
+        const cls = SB.LABEL_CLASS[state] + (strong ? " az-label--strong" : "");
         return h("span", { class: cls }, icon(STATE_ICON[state]), word);
     }
 

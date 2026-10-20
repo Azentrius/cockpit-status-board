@@ -1,6 +1,7 @@
 <!doctype html>
 <!-- The page of the add-on "e2e" of the end-to-end test (test/e2e_cockpit.py), so that a click on its
-     tile has somewhere to go. cockpit.js makes it a frame the shell shows.
+     tile has somewhere to go. cockpit.js makes it a frame the shell shows; probe.js opens its
+     transport, so that the shell counts the frame as loaded.
      SPDX-License-Identifier: Apache-2.0 -->
 <html lang="en">
 <head>
@@ -10,5 +11,6 @@
 </head>
 <body>
 <h1 id="probe">E2E Probe</h1>
+<script src="probe.js"></script>
 </body>
 </html>

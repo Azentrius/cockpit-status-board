@@ -15,6 +15,12 @@
     /* The five states of the status language, from least to most severe. */
     const STATES = ["none", "ok", "info", "warning", "danger"];
     const RANK = { none: 0, ok: 1, info: 2, warning: 3, danger: 4 };
+    /* Their labels in the shared design files (azentrius.css). "ok" is the status language's
+       "good", whose class is az-label--success; "none" is the plain label. */
+    const LABEL_CLASS = {
+        none: "az-label", ok: "az-label az-label--success", info: "az-label az-label--info",
+        warning: "az-label az-label--warning", danger: "az-label az-label--danger",
+    };
 
     /* A package folder under /usr/share/cockpit, and the target of cockpit.jump(). */
     const PACKAGE_RE = /^[a-z0-9][a-z0-9-]{0,40}$/;
@@ -393,7 +399,7 @@
     }
 
     const api = {
-        STATES, RANK, LIMITS, MAX_ITEMS, MAX_PACKAGES, MAX_OUTPUT,
+        STATES, RANK, LABEL_CLASS, LIMITS, MAX_ITEMS, MAX_PACKAGES, MAX_OUTPUT,
         PACKAGE_RE, ITEM_ID_RE, LINK_RE, COMMAND_RE,
         rank, worse, cleanText, parseTime,
         validateStatus, stateOfItems, evaluate, classifyFailure,

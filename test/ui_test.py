@@ -163,7 +163,8 @@ with sync_playwright() as p:
     check(tile_label(page, "public-host/update-gaps") == [LABEL["warning"], "Achtung", True], "held packages are a warning")
     check(host_label(page, "public-host") == [LABEL["danger"] + " az-label--strong", "Problem"], "the host's overall state: " + repr(host_label(page, "public-host")))
 
-    check(tile_label(page, "localhost/cronjobs") == [LABEL["ok"], "In Ordnung", True], "nothing found is OK")
+    got = tile_label(page, "localhost/cronjobs")
+    check(got == [LABEL["ok"], "In Ordnung", True], "nothing found is OK: " + repr(got))
     check(tile_label(page, "localhost/update-gaps") == [LABEL["none"], "Nicht installiert", True] and
           page.evaluate("""() => document.querySelector('[data-key="localhost/update-gaps"]').tagName""") == "DIV",
           "not installed: neutral and not a button")
