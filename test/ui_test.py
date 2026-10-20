@@ -128,17 +128,17 @@ def labels_right(page):
 SHELL_FRAME = "cockpit1:localhost/status-board"
 
 
-def open_in_shell(browser, multihost):
+def open_in_shell(browser, multihost, query=""):
     """The board in the frame of a stand-in for Cockpit's shell (test/serve.py, /shell.html), whose
     document carries the meta tag allow-multihost as cockpit-ws writes it from AllowMultiHost.
-    Returns the shell's page and the board's frame."""
+    query goes on to the board (scenario=…). Returns the shell's page and the board's frame."""
     ctx = browser.new_context(viewport={"width": 1280, "height": 900}, timezone_id="Europe/Berlin", locale="de-DE")
     page = ctx.new_page()
     page.problems = []
     page.on("console", lambda m: page.problems.append(m.text) if m.type in ("error", "warning") else None)
     page.on("pageerror", lambda e: page.problems.append("pageerror: " + str(e)))
     page.clock.install(time=NOW)
-    page.goto(f"http://127.0.0.1:{PORT}/shell.html?multihost={multihost}")
+    page.goto(f"http://127.0.0.1:{PORT}/shell.html?multihost={multihost}" + ("&" + query if query else ""))
     frame = page.frame(name=SHELL_FRAME)
     wait_idle(frame)
     return page, frame
@@ -343,6 +343,21 @@ with sync_playwright() as p:
     no_problems(shell, "without the host switcher")
     shell.context.close()
 
+    # host keys: without the host switcher the texts name the terminal (ssh, ssh-keygen -R)
+    shell, f = open_in_shell(browser, "no", "scenario=broken")
+    t = tile_text(f, "hostkey-host/unreachable")
+    check("Sein Hostschlüssel ist noch nicht bekannt." in t and "mit ssh im Terminal von Cockpit" in t and "Host-Umschalter" not in t,
+          "an unknown host key, without the host switcher: " + t)
+    t = tile_text(f, "changedkey-host/unreachable")
+    check("Sein Hostschlüssel hat sich geändert." in t and "ssh-keygen -R" in t and "Host-Umschalter" not in t,
+          "a changed host key, without the host switcher: " + t)
+    check(f.evaluate("""() => document.querySelector('[data-key="changedkey-host/unreachable"] code').innerText""") == "ssh-keygen -R",
+          "the command as code")
+    check("Dort ist cockpit-bridge nicht installiert." in tile_text(f, "nobridge-host/unreachable"),
+          "other reasons stay as they are")
+    no_problems(shell, "host keys without the host switcher")
+    shell.context.close()
+
     shell, f = open_in_shell(browser, "yes")
     check(f.evaluate("document.querySelector('#board').dataset.multihost") == "yes" and f.inner_text("#alerts").strip() == "",
           "with the host switcher: no alert")
@@ -407,7 +422,8 @@ with sync_playwright() as p:
         "half-host/cronjobs": "Sein Manifest ließ sich nicht lesen.",
         "dark-host/discovery": "Die Pakete auf diesem Host ließen sich nicht auflisten.",
         "nobridge-host/unreachable": "Dort ist cockpit-bridge nicht installiert.",
-        "hostkey-host/unreachable": "Sein Hostschlüssel ist noch nicht bekannt.",
+        "hostkey-host/unreachable": "Sein Hostschlüssel ist noch nicht bekannt. Verbinden Sie sich einmal über den Host-Umschalter.",
+        "changedkey-host/unreachable": "Sein Hostschlüssel hat sich geändert. Prüfen Sie ihn im Host-Umschalter.",
     }
     for key, want in expect.items():
         check(want in tile_text(page, key), key + ": " + want + " in " + repr(tile_text(page, key)))

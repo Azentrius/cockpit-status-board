@@ -59,6 +59,11 @@
             timeout: "Keine Antwort innerhalb von 20 Sekunden.",
             other: "Die Verbindung wurde beendet.",
         },
+        reachNoSwitcher: {
+            "unknown-host": "Sein Hostschlüssel ist noch nicht bekannt. Verbinden Sie sich einmal mit `ssh` im Terminal von Cockpit und prüfen Sie den Schlüssel.",
+            "unknown-hostkey": "Sein Hostschlüssel ist noch nicht bekannt. Verbinden Sie sich einmal mit `ssh` im Terminal von Cockpit und prüfen Sie den Schlüssel.",
+            "invalid-hostkey": "Sein Hostschlüssel hat sich geändert. Klären Sie den Grund, bevor Sie dem neuen Schlüssel vertrauen; `ssh-keygen -R` im Terminal von Cockpit entfernt den alten.",
+        },
 
         invalid: {
             "not-text": "Die Antwort ist kein Text.",

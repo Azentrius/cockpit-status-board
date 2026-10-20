@@ -97,6 +97,7 @@
                 "dark-host": { visible: true },
                 "nobridge-host": { visible: true },
                 "hostkey-host": { visible: true },
+                "changedkey-host": { visible: true },
             },
             hosts: {
                 localhost: host("vpn-host", cockpitPackages()),
@@ -110,6 +111,7 @@
                 "dark-host": host("dark-host", {}, { findFails: "find: '/usr/share/cockpit': Permission denied" }),
                 "nobridge-host": { reach: "no-cockpit" },
                 "hostkey-host": { reach: "unknown-host" },
+                "changedkey-host": { reach: "invalid-hostkey" },
             },
         }),
         /* No add-on with a status anywhere yet: one host answers, one does not. */
