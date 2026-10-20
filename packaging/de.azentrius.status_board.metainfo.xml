@@ -11,16 +11,17 @@
   <description>
     <p>
       A Cockpit page with one row per host of the host switcher and one tile per Azentrius add-on,
-      such as Cron Jobs, Image Update Monitor and Update Gaps: its state, its most important figure
-      and the age of its data. Hosts that do not answer, locked SSH keys, add-ons that are missing on
-      a host and data that is out of date are shown too. A click opens the add-on on its host.
+      such as Cron Jobs, Image Update Monitor, Update Gaps and Security Monitor: its state, its most
+      important figure and the age of its data. Hosts that do not answer, locked SSH keys, add-ons
+      that are missing on a host and data that is out of date are shown too. A click opens the
+      add-on on its host.
     </p>
     <p xml:lang="de">
       Eine Cockpit-Seite mit einer Zeile je Host des Host-Umschalters und einer Kachel je
-      Azentrius-Add-on, etwa Cron Jobs, Image Update Monitor und Update Gaps: sein Zustand, seine
-      wichtigste Kennzahl und das Alter seiner Daten. Auch Hosts, die nicht antworten, gesperrte
-      SSH-Schlüssel, Add-ons, die auf einem Host fehlen, und veraltete Daten werden gezeigt. Ein Klick
-      öffnet das Add-on auf seinem Host.
+      Azentrius-Add-on, etwa Cron Jobs, Image Update Monitor, Update Gaps und Security Monitor: sein
+      Zustand, seine wichtigste Kennzahl und das Alter seiner Daten. Auch Hosts, die nicht antworten,
+      gesperrte SSH-Schlüssel, Add-ons, die auf einem Host fehlen, und veraltete Daten werden
+      gezeigt. Ein Klick öffnet das Add-on auf seinem Host.
     </p>
     <p>
       The page only reads: it runs each add-on's status verb and never asks for administrative

@@ -5,7 +5,7 @@ tile per host and add-on. This file is the reference for authors of add-ons. Sta
 follow it (`src/lib/status.js`, `validateStatus`), and `test/fixtures/status` holds good, broken and
 hostile answers.
 
-Cron Jobs, Image Update Monitor (since 0.20.0) and Update Gaps implement it.
+Cron Jobs, Image Update Monitor (since 0.20.0), Update Gaps and Security Monitor implement it.
 
 ## Verb
 
@@ -93,7 +93,7 @@ breaks and tabs become spaces, and the page sets it with `textContent` only.
 it is loaded; a jump to `/PACKAGE#/place` then only changes `cockpit.location`, and the page does
 not load again. The page therefore listens to `cockpit.addEventListener("locationchanged", …)` and
 shows the place named there, not only the one it found when it started. Cron Jobs, Image Update
-Monitor and Update Gaps do this. Two more rules follow from it:
+Monitor, Update Gaps and Security Monitor do this. Two more rules follow from it:
 
 - **A tab chosen on the page goes into the location** (`cockpit.location.go([tab])`). Otherwise the
   location still names the place of the last link, and a second click on the same tile changes
@@ -102,7 +102,7 @@ Monitor and Update Gaps do this. Two more rules follow from it:
   (`cockpit.hidden`; a page Cockpit preloaded or one the user left); scrolling then does nothing and
   the link is lost. The page keeps the place and scrolls on `visibilitychange`.
 
-`test/fixtures/status/real-*.json` are the answers the three add-ons give, from their own verbs.
+`test/fixtures/status/real-*.json` are the answers the four add-ons give, from their own verbs.
 
 **`status.json` is the add-on's own file.** Its format is up to the add-on (Update Gaps, for
 example, keeps the German texts in an extra field there); the board reads only what the verb
@@ -136,7 +136,9 @@ tile goes.
 
 The same `status.json` can give the add-on's own menu entry a symbol, on the host whose menu is
 shown. Image Update Monitor does this since 0.21.0 (`plugin/menu-status.js`), Update Gaps and Cron
-Jobs in the same way.
+Jobs in the same way, and Security Monitor with its own `plugin/menu-status.js` since
+Azentrius/cockpit-security-monitor pull request 3 (`"preload": ["index"]`, `stale_after` one hour,
+so its symbol is at least a warning an hour after the last check).
 
 - The page sets it with `cockpit.transport.control("notify", { page_status: { type, title } })`:
   `danger` becomes `error`, `warning` and `info` stay, `ok` and `none` send no symbol; the title is

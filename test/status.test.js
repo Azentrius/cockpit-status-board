@@ -42,6 +42,8 @@ const EXPECT = {
     "real-image-updates.de.json": { state: "info", reported: "info", items: 5, key: "updates", value: "2", link: "#/updates/update" },
     "real-update-gaps.json": { state: "warning", reported: "warning", items: 6, key: "held", value: "6", link: "#/held" },
     "real-update-gaps.de.json": { state: "warning", reported: "warning", items: 6, key: "held", value: "6", link: "#/held" },
+    "real-security.json": { state: "danger", reported: "danger", items: 5, key: "containers", value: "1", link: "#/containers" },
+    "real-security.de.json": { state: "danger", reported: "danger", items: 5, key: "containers", value: "1", link: "#/containers" },
     "good-minimal.json": { state: "none", reported: "none", items: 0, key: null },
     /* says ok, but an item says danger: the board believes the item */
     "good-understated.json": { state: "danger", reported: "ok", items: 1, key: "cves", dropped: 2 },
@@ -292,6 +294,8 @@ t("statusEntry of the manifest fixtures", () => {
     assert.deepStrictEqual(SB.statusEntry(m("cronjobs")), { command: "/usr/lib/cockpit-cronjobs/cronjobs-status" });
     assert.deepStrictEqual(SB.statusEntry(m("image-updates")), { command: "/usr/lib/cockpit-image-updates/diun-update.py" });
     assert.deepStrictEqual(SB.statusEntry(m("update-gaps")), { command: "/usr/lib/cockpit-update-gaps/gaps-status.py" });
+    /* the helper's folder need not be named after the package folder ("security") */
+    assert.deepStrictEqual(SB.statusEntry(m("security")), { command: "/usr/lib/cockpit-security-monitor/security.py" });
     assert.strictEqual(SB.statusEntry(m("update-gaps-old")), null);
     assert.strictEqual(SB.statusEntry(m("system")), null);
     assert.strictEqual(SB.statusEntry(JSON.parse(fs.readFileSync(path.join(__dirname, "..", "src", "manifest.json"), "utf8"))), null,

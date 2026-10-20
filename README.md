@@ -3,7 +3,9 @@
 A [Cockpit](https://cockpit-project.org) page with the state of the Azentrius add-ons on every host
 of Cockpit's host switcher: one row per host, one tile per add-on, such as
 [Cron Jobs](https://github.com/Azentrius/cockpit-cronjobs),
-[Image Update Monitor](https://github.com/Azentrius/cockpit-image-update-monitor) and Update Gaps.
+[Image Update Monitor](https://github.com/Azentrius/cockpit-image-update-monitor),
+[Update Gaps](https://github.com/Azentrius/cockpit-update-gaps) and
+[Security Monitor](https://github.com/Azentrius/cockpit-security-monitor).
 It belongs on the Cockpit host from which the others are reached.
 
 Status Board only reads. It runs each add-on's `status` verb, asks for no administrative access
