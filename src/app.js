@@ -367,9 +367,11 @@
         case "noaccess": return [text(T.noaccessText)];
         case "rejected": return [text(rich(T.rejectedText))];
         case "error": return [text(rich(errorText(tile.error))), tile.error.message ? meta(tile.error.message) : null];
-        case "unreachable":
-            return [text(rich(own(T.reach, tile.problem) ? T.reach[tile.problem] : T.reach.other)),
-                    tile.message ? meta(tile.message) : null, toHost];
+        case "unreachable": {
+            const why = !OTHER_HOSTS && own(T.reachNoSwitcher, tile.problem) ? T.reachNoSwitcher[tile.problem]
+                : own(T.reach, tile.problem) ? T.reach[tile.problem] : T.reach.other;
+            return [text(rich(why)), tile.message ? meta(tile.message) : null, toHost];
+        }
         case "locked":
             return [text(rich(OTHER_HOSTS ? T.lockedText : T.lockedTextNoSwitcher)),
                     tile.identity ? meta(h("code", null, tile.identity)) : null, toHost];

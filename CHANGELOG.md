@@ -10,7 +10,8 @@ page.
   A tile shows the add-on's state in the status language, its most important figure with its
   title below it, its summary and the age of its data; a click opens the add-on on its host. On
   other hosts only while Cockpit has its host switcher (`AllowMultiHost`): without it the shell
-  would open the add-on of this host, so the board leaves those tiles inert and says why.
+  would open the add-on of this host, so the board leaves those tiles inert and says why, and its
+  advice for locked keys and unknown or changed host keys names Cockpit's terminal instead.
 - **The status contract, version 1** (docs/STATUS-CONTRACT.md). Add-ons are found by the section
   `azentrius.status` in their manifest: on this host through `cockpit.manifests`, on the others
   through `find /usr/share/cockpit …` and the manifest files. Only commands below

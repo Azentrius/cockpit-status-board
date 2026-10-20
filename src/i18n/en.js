@@ -63,6 +63,13 @@
             timeout: "No answer within 20 seconds.",
             other: "The connection ended.",
         },
+        /* The same, where they would name the host switcher and Cockpit runs without it. The
+           bridge checks host keys against ~/.ssh/known_hosts, as ssh in the terminal does. */
+        reachNoSwitcher: {
+            "unknown-host": "Its host key is not known yet. Connect to it once with `ssh` in Cockpit's terminal and check the key.",
+            "unknown-hostkey": "Its host key is not known yet. Connect to it once with `ssh` in Cockpit's terminal and check the key.",
+            "invalid-hostkey": "Its host key has changed. Find out why before you trust the new key; `ssh-keygen -R` in Cockpit's terminal removes the old one.",
+        },
 
         /* Why the status of an add-on could not be read. */
         invalid: {

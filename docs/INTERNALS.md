@@ -94,9 +94,14 @@ and the shell turns on its host switcher only for `yes` (`pkg/shell/state.tsx`, 
 Without it the shell turns every location with another host into `localhost` and keeps path and
 fragment (`state.tsx`, `update`): a jump to `/update-gaps#/held` on another host would open the
 add-on of this host. The board reads the same meta tag; without `yes` the tiles of other hosts are
-no buttons, an alert says why, and the text for a locked key names `ssh-add` and a new login
-instead of the host switcher. A page without a shell around it, or one that cannot read the shell's
-document, keeps the jumps (`data-multihost="unknown"` on `#board`, which the tests read).
+no buttons, an alert says why, and the texts that would send the user to the host switcher name
+Cockpit's terminal instead: `ssh-add` or a new login for a locked key, `ssh HOST` for an unknown
+host key, `ssh-keygen -R` for a changed one. That works because the bridge runs `ssh` with
+`StrictHostKeyChecking=yes` and OpenSSH's own files (`~/.ssh/known_hosts`,
+`/etc/ssh/ssh_known_hosts`; `src/cockpit/remote.py`, `SshPeer`), and the host switcher writes an
+accepted key into `~/.ssh/known_hosts` too (`pkg/lib/ssh-add-key.sh`). A page without a shell
+around it, or one that cannot read the shell's document, keeps the jumps
+(`data-multihost="unknown"` on `#board`, which the tests read).
 
 ## Tiles
 
@@ -190,8 +195,7 @@ Cockpit 360 and three hosts behind it, reached over SSH (Cockpit 360 and 362, Ub
    "Every call the page makes").
 
 Still derived only: the board's reaction to `AllowMultiHost` off is tested against the stand-in
-(`/shell.html` in `test/serve.py`); and the texts for an unknown or changed host key point to the
-host switcher also when Cockpit runs without it.
+(`/shell.html` in `test/serve.py`).
 
 Read from the code as well: neither the shell's router (`pkg/shell/router.jsx`, which passes a
 frame's channels on unchanged) nor `cockpit-ws` checks the `host` of a channel, and the bridge
