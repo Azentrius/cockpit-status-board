@@ -192,10 +192,15 @@ Cockpit 360 and three hosts behind it, reached over SSH (Cockpit 360 and 362, Ub
 7. With `AllowMultiHost = false` the board still reads every host, but a click on another host's
    tile opened the add-on of the bastion: the shell keeps path and fragment and swaps the host for
    `localhost`. Since then the board reads `allow-multihost` and leaves those tiles inert (see
-   "Every call the page makes").
+   "Every call the page makes"). Run again the same day with that change: the alert "Without the
+   host switcher" stands above the rows, only this host's tiles open their add-on, and the tiles of
+   other hosts offer nothing to open. A test host `127.0.0.1` in `machines.d`, whose key is not in
+   `known_hosts` under that name, turns "Unreachable" with the text for an unknown host key that
+   names `ssh` in Cockpit's terminal.
 
-Still derived only: the board's reaction to `AllowMultiHost` off is tested against the stand-in
-(`/shell.html` in `test/serve.py`).
+Still derived only: the text for a changed host key (`invalid-hostkey`) is tested against the
+stand-in alone, and whether `ssh HOST` in the terminal is all it takes for the board to reach a
+host with an unknown key was not tried on the bastion.
 
 Read from the code as well: neither the shell's router (`pkg/shell/router.jsx`, which passes a
 frame's channels on unchanged) nor `cockpit-ws` checks the `host` of a channel, and the bridge
