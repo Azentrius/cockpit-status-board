@@ -6,7 +6,7 @@
  * test/serve.py): the manifests, and the output of each add-on's status verb, the German one
  * when there is a .de.json and the page asks with --lang de.
  *
- * Query parameters: scenario=default|hostile|broken|empty, badhosts=1 (the invalid names of the
+ * Query parameters: scenario=default|real|hostile|broken|empty, badhosts=1 (the invalid names of the
  * machines fixture stay in the list), delay (ms per answer). Tests change window.__mock at run
  * time and read what the page did from it: calls, jumps, watches, unexpected. */
 (function () {
@@ -68,6 +68,45 @@
                 "locked-host": { reach: "locked" },
             },
         }),
+        /* The four add-ons with the answers they give (status/real-*.json): all four on public-host,
+           the Security Monitor on its recordings of the other hosts, the rest from the good
+           fixtures; the README's screenshots. */
+        real: () => {
+            const machines = machinesFixture();
+            delete machines["old-host"];
+            delete machines["locked-host"];
+            return {
+                machines,
+                hosts: {
+                    localhost: host("vpn-host", Object.assign(cockpitPackages(), {
+                        cronjobs: pkg("cronjobs", "good-cronjobs-ok"),
+                        "image-updates": pkg("image-updates", "good-image-updates"),
+                        security: pkg("security", "real-security-edge"),
+                        "update-gaps": pkg("update-gaps", "good-update-gaps"),
+                    })),
+                    "stefan@public-host": host("public-host", {
+                        system: pkg("system", null),
+                        cronjobs: pkg("cronjobs", "real-cronjobs"),
+                        "image-updates": pkg("image-updates", "real-image-updates"),
+                        security: pkg("security", "real-security"),
+                        "update-gaps": pkg("update-gaps", "real-update-gaps"),
+                    }),
+                    "build-host": host("build-host", {
+                        system: pkg("system", null),
+                        cronjobs: pkg("cronjobs", "good-cronjobs-ok"),
+                        "image-updates": pkg("image-updates", "good-image-updates-stale"),
+                        security: pkg("security", "real-security-ci"),
+                        "update-gaps": pkg("update-gaps", "good-update-gaps"),
+                    }),
+                    "claw-host:2222": host("claw-host", {
+                        system: pkg("system", null),
+                        cronjobs: pkg("cronjobs", "good-cronjobs-ok"),
+                        security: pkg("security", "real-security-ipv6"),
+                        "update-gaps": pkg("update-gaps", "good-update-gaps"),
+                    }),
+                },
+            };
+        },
         /* Hosts that send what they should not. */
         hostile: () => ({
             machines: {

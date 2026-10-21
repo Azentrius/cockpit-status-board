@@ -44,6 +44,13 @@ const EXPECT = {
     "real-update-gaps.de.json": { state: "warning", reported: "warning", items: 6, key: "held", value: "6", link: "#/held" },
     "real-security.json": { state: "danger", reported: "danger", items: 5, key: "containers", value: "1", link: "#/containers" },
     "real-security.de.json": { state: "danger", reported: "danger", items: 5, key: "containers", value: "1", link: "#/containers" },
+    /* the Security Monitor on its recordings of the other three hosts: vpn-host, build-host, claw-host */
+    "real-security-edge.json": { state: "danger", reported: "danger", items: 5, key: "containers", value: "1", link: "#/containers" },
+    "real-security-edge.de.json": { state: "danger", reported: "danger", items: 5, key: "containers", value: "1", link: "#/containers" },
+    "real-security-ci.json": { state: "danger", reported: "danger", items: 5, key: "containers", value: "5", link: "#/containers" },
+    "real-security-ci.de.json": { state: "danger", reported: "danger", items: 5, key: "containers", value: "5", link: "#/containers" },
+    "real-security-ipv6.json": { state: "danger", reported: "danger", items: 5, key: "containers", value: "1", link: "#/containers" },
+    "real-security-ipv6.de.json": { state: "danger", reported: "danger", items: 5, key: "containers", value: "1", link: "#/containers" },
     "good-minimal.json": { state: "none", reported: "none", items: 0, key: null },
     /* says ok, but an item says danger: the board believes the item */
     "good-understated.json": { state: "danger", reported: "ok", items: 1, key: "cves", dropped: 2 },
