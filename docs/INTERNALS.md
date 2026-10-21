@@ -140,7 +140,12 @@ on the tile. The panel spans the whole row of the grid and goes below the row of
 (`grid-auto-flow: row dense`; the cards after it in the source still fill that row first), so the
 cards keep their size and nothing in the row moves when it opens or closes; only the rows below
 move down. In version 0.2.0 the entries opened inside the card, and the other cards of the row
-jumped to a new height. The card and its panel share the border colour. The panel exists only while
+jumped to a new height. The card and its panel share the border colour. In the panel the entries are
+a table of the shared design files (`az-table az-table--stack`) with the columns Entry, Value, State
+and Details, one row per entry, so names, values and labels line up; on a phone each row stacks into
+a block with the column names, and empty cells are left out. (0.2.1 set them as small blocks side by
+side, where the label wrapped to its own line or not depending on the length of title and value.)
+The panel exists only while
 it is open (a hidden button would still be a control on a phone), and open tiles stay open when the
 board loads again (`state.open`, by `data-key`; not kept across page loads).
 

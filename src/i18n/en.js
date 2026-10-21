@@ -30,6 +30,10 @@
         itemsShow: n => `All ${n} entries`,
         itemsHide: "Hide the entries",
         itemsOf: name => `Entries of ${name}`,
+        colEntry: "Entry",
+        colValue: "Value",
+        colState: "State",
+        colDetail: "Details",
         version: v => `Version ${v}`,
         newerElsewhere: v => `Version ${v} runs on other hosts`,
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.2 – 2026-10-22
+
+The entries of a tile line up.
+
+- **A table of entries:** the panel below the row shows the entries as a table with the columns
+  Entry, Value, State and Details, one row each, instead of small blocks side by side, where the
+  label stood next to the value on one entry and on a line of its own on the next. On a phone each
+  row becomes a block with the column names; empty cells are left out.
+
 ## 0.2.1 – 2026-10-22
 
 The tiles of a row stay put when a tile's entries open or close.

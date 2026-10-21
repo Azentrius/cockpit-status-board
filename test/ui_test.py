@@ -537,6 +537,14 @@ with sync_playwright() as p:
         const r = p.getBoundingClientRect(), cards = Array.from(p.parentElement.querySelectorAll('.sb-cell')).map(c => c.getBoundingClientRect());
         return [Math.round(r.width) === Math.round(row.width), Math.round(r.top) > Math.max(...cards.map(c => Math.round(c.bottom)))]; }""", key)
     check(panel == [True, True], "the panel spans the row, below all of its cards: " + repr(panel))
+    table = page.evaluate("""k => { const p = document.querySelector('[data-items-for="' + k + '"]');
+        const x = sel => Array.from(new Set(Array.from(p.querySelectorAll(sel)).map(e => Math.round(e.getBoundingClientRect().left))));
+        return { head: Array.from(p.querySelectorAll('thead th')).map(th => th.innerText.trim()),
+                 cells: Array.from(p.querySelectorAll('tbody tr')).map(tr => tr.children.length),
+                 names: x('.sb-item__name'), values: x('.sb-item__value'), states: x('.sb-item__state .az-label'), details: x('.sb-item__detail') }; }""", key)
+    check(table["head"] == ["Entry", "Value", "State", "Details"] and table["cells"] == [4] * 5
+          and all(len(table[c]) == 1 for c in ("names", "values", "states", "details")),
+          "the entries are a table: one row each, names, values, labels and details in their columns: " + repr(table))
     check(got == [["exposure", "Warning", "Reachable from the internet", True, "10"], ["ssh", "Notice", "SSH", True, None],
                   ["logins", "OK", "Logins", True, "0"], ["containers", "Problem", "Container hardening", True, "1"],
                   ["scan", "OK", "Check", False, None]],
