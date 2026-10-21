@@ -11,6 +11,8 @@ It belongs on the Cockpit host from which the others are reached.
 Status Board only reads. It runs each add-on's `status` verb, asks for no administrative access
 and changes nothing on any host; a click on a tile opens the add-on on its host.
 
+![The board on a bastion with three hosts behind it, one tile per add-on](docs/img/board.png)
+
 ## What it shows
 
 - **One row per host,** in the order of the host switcher, this host first. The row's header names
@@ -30,6 +32,12 @@ and changes nothing on any host; a click on a tile opens the add-on on its host.
   visible.
 
 A tile in OK means that the add-on found nothing in what it checks, not that the host is safe.
+
+| ![The same board in Cockpit's dark style](docs/img/board-dark.png) | ![The board on a phone](docs/img/board-phone.png) |
+|---|---|
+
+The screenshots come from the browser tests (`test/ui_test.py`, scenario `real`): the answers the
+add-ons give on their own test data, kept as the artifact `screenshots` of each test run.
 
 ## How it works
 
@@ -55,6 +63,16 @@ of add-ons; [docs/INTERNALS.md](docs/INTERNALS.md) has the details and every cal
   `status.json`); that is the normal case for hosts reached with a key.
 
 ## Installation
+
+**From the Azentrius package repository** (Debian, Ubuntu, Fedora, RHEL; set up once, see
+[packages.azentrius.com](https://packages.azentrius.com)), on the host with the host switcher:
+
+```sh
+sudo apt update && sudo apt install cockpit-status-board   # Debian, Ubuntu
+sudo dnf install cockpit-status-board                      # Fedora, RHEL
+```
+
+Or install **Status Board** in Cockpit under **Applications**.
 
 **From the files of a release.** Every
 [release](https://github.com/Azentrius/cockpit-status-board/releases) has the `.deb` and the
@@ -170,6 +188,10 @@ the artifact `e2e-screenshots`.
    runs all tests, builds `cockpit-status-board-VERSION.tar.gz` and the `.deb` and `.rpm`, all
    reproducible, with `SHA256SUMS` and a signed build provenance, and creates the tag `vVERSION`
    with a release whose notes come from `CHANGELOG.md`.
+4. packages.azentrius.com takes the packages from the release within an hour
+   ([Azentrius/packages](https://github.com/Azentrius/packages)). The `.deb` there is the release's
+   byte for byte; the `.rpm` gets the repository's own signature, so only its signature header
+   differs.
 
 ## License
 
