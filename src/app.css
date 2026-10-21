@@ -71,19 +71,24 @@ button.sb-tile:focus-visible { outline: 2px solid var(--focus); outline-offset: 
 /* ---------- the entries of an answer, in a panel across the row ---------- */
 .sb-tile__more { display: flex; flex-direction: column; gap: var(--space-xs); padding: 0 var(--space-md) var(--space-md); }
 .sb-tile__toggle { align-self: flex-start; padding-inline: 0; }
-.sb-panel { grid-column: 1 / -1; display: flex; flex-direction: column; gap: var(--space-sm); padding: var(--space-md); min-inline-size: 0; }
-.sb-panel__title { margin: 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
-.sb-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: var(--space-md) var(--space-lg); margin: 0; padding: 0; list-style: none; }
-.sb-item { display: flex; flex-direction: column; gap: 2px; min-inline-size: 0; }
-.sb-item__head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-sm); }
-.sb-item__head > .az-label { margin-inline-start: auto; }
-.sb-item__title { font-size: 14px; overflow-wrap: anywhere; }
+/* The panel: a card header, then the table (az-table) of its entries, one row each. */
+.sb-panel { grid-column: 1 / -1; min-inline-size: 0; }
+.sb-panel .az-card__title { font-size: 14px; overflow-wrap: anywhere; }
+/* The same columns in every panel, so panels below each other line up too: the entry's name, its
+   value, its state (never wrapped), the detail takes the rest. */
+.sb-items { table-layout: fixed; }
+.sb-items th:nth-child(1) { inline-size: 30%; }
+.sb-items th:nth-child(2) { inline-size: 12%; }
+.sb-items th:nth-child(3) { inline-size: 16%; }
+.sb-item__name, .sb-item__value { overflow-wrap: anywhere; }
 .sb-item__link { padding-inline: 0; text-align: start; overflow-wrap: anywhere; }
-.sb-item__value { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.sb-item__detail { color: var(--text-subtle); font-size: 12px; overflow-wrap: anywhere; }
+.sb-item__value { font-weight: 600; font-variant-numeric: tabular-nums; }
+.sb-item__detail { color: var(--text-subtle); overflow-wrap: anywhere; }
 .sb-tile code, .sb-alerts code { font-family: var(--az-font-code); font-size: 0.92em; overflow-wrap: anywhere; }
 
 @media (max-width: 640px) {
   .sb-tiles { grid-template-columns: 1fr; }
   .sb-board { gap: var(--space-lg); }
+  /* In the stacked table an entry without a value or a detail shows no empty line. */
+  .sb-items td:empty { display: none; }
 }

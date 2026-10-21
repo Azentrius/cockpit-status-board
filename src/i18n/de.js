@@ -28,6 +28,10 @@
         itemsShow: n => `Alle ${n} Einträge`,
         itemsHide: "Einträge ausblenden",
         itemsOf: name => `Einträge von ${name}`,
+        colEntry: "Eintrag",
+        colValue: "Wert",
+        colState: "Zustand",
+        colDetail: "Details",
         version: v => `Version ${v}`,
         newerElsewhere: v => `Auf anderen Hosts läuft Version ${v}`,
 

@@ -25,7 +25,7 @@
 (function () {
     "use strict";
 
-    const VERSION = "0.2.1";
+    const VERSION = "0.2.2";
     const SB = window.StatusBoard;
     const ICONS = window.AzIcons;
     const REFRESH_MS = 5 * 60 * 1000;
@@ -411,21 +411,22 @@
         else cockpit.jump(path, host.key);
     }
 
-    /* One entry of an answer: its title (a button to its place when it has one), its value, its
-       label, its detail, and since when it is out of date where that differs from the tile's own
-       "out of date since"; data-focus lets render() put the focus back. */
+    /* One entry of an answer as a row of the table: its title (a button to its place when it has
+       one), its value, its label, its detail and since when it is out of date where that differs
+       from the tile's own "out of date since". An empty cell stays empty (the stacked view on a
+       phone leaves it out); data-focus lets render() put the focus back. */
     function renderItem(host, tile, key, item, go) {
         const since = item.staleAt !== null && item.staleAt !== tile.eval.staleSince ? T.staleSince(fmtWhen(item.staleAt)) : null;
         const name = go && item.link
             ? h("button", { class: "az-btn az-btn--link az-btn--sm sb-item__link", type: "button", "data-focus": key + "#" + item.id,
                             onclick: () => jumpTo(host, tile, item.link) }, item.title)
             : h("span", { class: "sb-item__title" }, item.title);
-        return h("li", { class: "sb-item", "data-item": item.id },
-            h("span", { class: "sb-item__head" }, name,
-                item.value ? h("span", { class: "sb-item__value" }, item.value) : null,
-                label(item.state, T.words[item.word])),
-            item.detail ? h("span", { class: "sb-item__detail" }, item.detail) : null,
-            since ? h("span", { class: "sb-item__detail" }, since) : null);
+        return h("tr", { class: "sb-item", "data-item": item.id },
+            h("td", { class: "sb-item__name", "data-label": T.colEntry }, name),
+            h("td", { class: "sb-item__value", "data-label": T.colValue }, item.value),
+            h("td", { class: "sb-item__state az-nowrap", "data-label": T.colState }, label(item.state, T.words[item.word])),
+            h("td", { class: "sb-item__detail", "data-label": T.colDetail }, item.detail,
+                since ? h("span", { class: "az-cell-sub" }, since) : null));
     }
 
     /* The toggle below a tile that has more than its key item; it opens or closes the panel. */
@@ -442,13 +443,18 @@
     }
 
     /* Every entry of an answer, in a panel across the whole row below the tile's row of cards: the
-       cards keep their size, so nothing in the row moves when it opens or closes. It exists only
-       while it is open (a hidden button would still count). */
+       cards keep their size, so nothing in the row moves when it opens or closes. The entries are a
+       table with fixed columns (entry, value, state, detail), one row each; on a phone each row
+       stacks (az-table--stack). The panel exists only while it is open (a hidden button would still
+       count). */
     function renderPanel(host, tile, key, go, panelId) {
         const titleId = panelId + "-title";
+        const head = [T.colEntry, T.colValue, T.colState, T.colDetail].map(t => h("th", { scope: "col" }, t));
         return h("section", { class: "az-card sb-panel", id: panelId, "data-items-for": key, "aria-labelledby": titleId },
-            h("h3", { class: "sb-panel__title", id: titleId }, T.itemsOf(tile.label)),
-            h("ul", { class: "sb-items" }, tile.eval.items.map(item => renderItem(host, tile, key, item, go))));
+            h("div", { class: "az-card__header" }, h("h3", { class: "az-card__title", id: titleId }, T.itemsOf(tile.label))),
+            h("div", { class: "az-card__body--flush" }, h("div", { class: "az-table-wrap" },
+                h("table", { class: "az-table az-table--stack sb-items" }, h("thead", null, h("tr", null, head)),
+                    h("tbody", null, tile.eval.items.map(item => renderItem(host, tile, key, item, go)))))));
     }
 
     /* A card per tile: the tile itself (a button when a click opens something), then the toggle of
