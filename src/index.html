@@ -9,18 +9,18 @@
      the theme script before the stylesheets, so the page never flashes in the wrong brightness.
      Every file of the add-on carries ?v=VERSION, so browsers fetch the new files after an update
      (tools/check-version.sh). Everything is local: Cockpit's strict CSP stays as it is. -->
-<script src="azentrius-theme.js?v=0.1.0"></script>
-<link rel="stylesheet" href="azentrius.css?v=0.1.0">
-<link rel="stylesheet" href="app.css?v=0.1.0">
+<script src="azentrius-theme.js?v=0.2.0"></script>
+<link rel="stylesheet" href="azentrius.css?v=0.2.0">
+<link rel="stylesheet" href="app.css?v=0.2.0">
 <!-- Cockpit: its API, its translation for the session language (sets cockpit.language), and the
      manifests of this host's packages (cockpit.manifests). -->
 <script src="../base1/cockpit.js"></script>
 <script src="../base1/po.js"></script>
 <script src="../manifests.js"></script>
-<script src="icons.js?v=0.1.0"></script>
-<script src="i18n/en.js?v=0.1.0"></script>
-<script src="i18n/de.js?v=0.1.0"></script>
-<script src="lib/status.js?v=0.1.0"></script>
+<script src="icons.js?v=0.2.0"></script>
+<script src="i18n/en.js?v=0.2.0"></script>
+<script src="i18n/de.js?v=0.2.0"></script>
+<script src="lib/status.js?v=0.2.0"></script>
 </head>
 <body>
 <div class="az-page" id="page">
@@ -28,6 +28,7 @@
   <header class="az-page-header">
     <h1 class="az-page-title az-page-title--dot" id="page-title" tabindex="-1">Status Board</h1>
     <div class="az-page-actions">
+      <label class="az-switch"><input type="checkbox" id="only-notable"><span class="az-switch__track"></span><span class="az-switch__label" data-t="onlyNotable">Only what needs attention</span></label>
       <span class="az-meta" id="meta"></span>
       <!-- Starts busy: the first load begins as soon as app.js runs. -->
       <button class="az-btn az-btn--primary" type="button" id="refresh" disabled aria-busy="true"><span data-icon="sync-alt"></span><span id="refresh-label" data-t="refreshing">Loading …</span></button>
@@ -46,6 +47,6 @@
   </footer>
 </div>
 
-<script src="app.js?v=0.1.0"></script>
+<script src="app.js?v=0.2.0"></script>
 </body>
 </html>

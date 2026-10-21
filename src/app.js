@@ -16,12 +16,16 @@
  * instead of watching files: cockpit.file().watch() ignores the host option and would watch the
  * file on this host.
  *
+ * A tile folds out every entry of its answer, each opening its own place in the add-on; a switch
+ * shows only what needs attention (kept in the browser), and a tile says when the same add-on runs
+ * in a newer version on another host.
+ *
  * SPDX-License-Identifier: Apache-2.0
  */
 (function () {
     "use strict";
 
-    const VERSION = "0.1.0";
+    const VERSION = "0.2.0";
     const SB = window.StatusBoard;
     const ICONS = window.AzIcons;
     const REFRESH_MS = 5 * 60 * 1000;
@@ -250,7 +254,18 @@
 
     /* ---------- the page's state and loading ---------- */
 
-    const state = { loading: false, loadedAt: 0, hosts: [], alerts: [] };
+    /* The switch "only what needs attention" is the user's choice in this browser; without
+       storage (private window, blocked) it starts off each time. */
+    const NOTABLE_KEY = "status-board:only-notable";
+    function readOnlyNotable() {
+        try { return window.localStorage.getItem(NOTABLE_KEY) === "1"; } catch (_) { return false; }
+    }
+    function saveOnlyNotable(on) {
+        try { window.localStorage.setItem(NOTABLE_KEY, on ? "1" : "0"); } catch (_) { /* no storage */ }
+    }
+
+    /* open: the tiles whose entries are folded out, by data-key; they stay open across loads. */
+    const state = { loading: false, loadedAt: 0, hosts: [], alerts: [], open: new Set(), onlyNotable: readOnlyNotable() };
 
     const hostLabel = host => host.label || (host.result && host.result.hostname) || host.key;
 
@@ -345,10 +360,12 @@
         }
         const line = st.summary || (key && key.detail);
         if (line) parts.push(text(line));
+        if (tile.newer) parts.push(h("span", { class: "sb-tile__hint" }, icon("arrow-circle-up"), T.newerElsewhere(tile.newer)));
         const facts = [];
         if (ev.checkedAt !== null) facts.push(T.checked(fmtAgo(ev.checkedAt)));
         if (ev.staleSince !== null) facts.push(T.staleSince(fmtWhen(ev.staleSince)));
         if (st.dropped) facts.push(T.dropped(st.dropped));
+        if (st.version) facts.push(T.version(st.version));
         if (facts.length) {
             const m = meta(facts.join(" · "));
             if (ev.checkedAt !== null) m.title = fmtFull(ev.checkedAt);
@@ -380,29 +397,69 @@
         }
     }
 
-    function jumpTo(host, tile) {
+    /* link: the place of one entry; else the key item's */
+    function jumpTo(host, tile, link) {
         if (!host.own && !OTHER_HOSTS) return;
         if (tile.jump === "host") {
             cockpit.jump("/system", host.key);
             return;
         }
         if (!SB.PACKAGE_RE.test(tile.pkg)) return;
-        const link = tile.kind === "status" && tile.eval.key && tile.eval.key.link ? tile.eval.key.link : "";
-        const path = "/" + tile.pkg + (SB.LINK_RE.test(link) ? link : "");
+        const place = link !== undefined ? link : tile.kind === "status" && tile.eval.key && tile.eval.key.link ? tile.eval.key.link : "";
+        const path = "/" + tile.pkg + (SB.LINK_RE.test(place) ? place : "");
         if (host.own) cockpit.jump(path);
         else cockpit.jump(path, host.key);
     }
 
-    function renderTile(host, tile) {
+    /* One entry of an answer: its title (a button to its place when it has one), its value, its
+       label, its detail, and since when it is out of date where that differs from the tile's own
+       "out of date since"; data-focus lets render() put the focus back. */
+    function renderItem(host, tile, key, item, go) {
+        const since = item.staleAt !== null && item.staleAt !== tile.eval.staleSince ? T.staleSince(fmtWhen(item.staleAt)) : null;
+        const name = go && item.link
+            ? h("button", { class: "az-btn az-btn--link az-btn--sm sb-item__link", type: "button", "data-focus": key + "#" + item.id,
+                            onclick: () => jumpTo(host, tile, item.link) }, item.title)
+            : h("span", { class: "sb-item__title" }, item.title);
+        return h("li", { class: "sb-item", "data-item": item.id },
+            h("span", { class: "sb-item__head" }, name,
+                item.value ? h("span", { class: "sb-item__value" }, item.value) : null,
+                label(item.state, T.words[item.word])),
+            item.detail ? h("span", { class: "sb-item__detail" }, item.detail) : null,
+            since ? h("span", { class: "sb-item__detail" }, since) : null);
+    }
+
+    /* Every entry of an answer, folded away below the tile (only when there is more than the key
+       item). The list exists only while it is open: a hidden button would still count. */
+    function renderItems(host, tile, key, go, id) {
+        if (tile.kind !== "status" || tile.eval.items.length < 2) return null;
+        const open = state.open.has(key);
+        const listId = "items-" + id;
+        const toggle = h("button", {
+            class: "az-btn az-btn--link az-btn--sm sb-tile__toggle", type: "button", "data-focus": key + "#items",
+            "aria-expanded": open ? "true" : "false", "aria-controls": open ? listId : null,
+            onclick: () => {
+                if (state.open.has(key)) state.open.delete(key);
+                else state.open.add(key);
+                render();
+            },
+        }, icon(open ? "angle-down" : "angle-right"), open ? T.itemsHide : T.itemsShow(tile.eval.items.length));
+        return h("div", { class: "sb-tile__more" }, toggle,
+            open ? h("ul", { class: "sb-items", id: listId, "aria-label": T.itemsOf(tile.label) },
+                tile.eval.items.map(item => renderItem(host, tile, key, item, go))) : null);
+    }
+
+    /* A card per tile: the tile itself (a button when a click opens something), then its entries. */
+    function renderTile(host, tile, id) {
         const key = host.key + "/" + (tile.pkg || tile.kind);
-        if (tile.kind === "loading") return h("div", { class: "az-card sb-tile", "data-key": key }, text(T.loading));
+        if (tile.kind === "loading") return h("div", { class: "az-card sb-cell" }, h("div", { class: "sb-tile", "data-key": key }, text(T.loading)));
         /* Without the host switcher the shell would open another host's add-on on this host. */
         const go = !!tile.jump && (host.own || OTHER_HOSTS);
         const parts = [h("span", { class: "sb-tile__head" },
             h("span", { class: "sb-tile__name" }, tile.pkg ? tile.label : T.connection),
             label(tile.state, T.words[tile.word])), tileParts(tile, go)];
-        if (!go) return h("div", { class: "az-card sb-tile", "data-key": key }, parts);
-        return h("button", { class: "az-card sb-tile", type: "button", "data-key": key, onclick: () => jumpTo(host, tile) }, parts);
+        const main = go ? h("button", { class: "sb-tile", type: "button", "data-key": key, onclick: () => jumpTo(host, tile) }, parts)
+            : h("div", { class: "sb-tile", "data-key": key }, parts);
+        return h("div", { class: "az-card sb-cell" }, main, renderItems(host, tile, key, go, id));
     }
 
     /* The row's label: the most severe state of its add-ons, or why the host could not be read. */
@@ -412,25 +469,32 @@
         return fault ? label(fault.state, T.words[fault.word], true) : null;
     }
 
-    /* quiet: no note for a row without tiles (the empty state above says it for all rows) */
-    function renderRow(row, index, quiet) {
+    /* quiet: no note for a row without tiles (the empty state above says it for all rows).
+       The label always says the whole row; with "only what needs attention" the tiles that do not
+       are left out, and a row left without any says so. */
+    function renderRow(row, index, quiet, nextId) {
         const host = row.host;
         const id = "host-" + index;
         const sub = host.own ? T.thisHost : (host.connection !== host.label ? host.connection : null);
+        const tiles = state.onlyNotable ? row.tiles.filter(SB.notable) : row.tiles;
+        const note = row.tiles.length ? T.nothingNotable : T.hostEmpty;
         return h("section", { class: "sb-host", "aria-labelledby": id, "data-host": host.key },
             h("div", { class: "sb-host__header" },
                 h("h2", { class: "sb-host__title", id }, host.label),
                 sub ? h("span", { class: "az-meta" }, sub) : null,
                 rowLabel(row)),
-            row.tiles.length ? h("div", { class: "sb-tiles" }, row.tiles.map(t => renderTile(host, t)))
-                : quiet ? null : h("p", { class: "sb-note" }, T.hostEmpty));
+            tiles.length ? h("div", { class: "sb-tiles" }, tiles.map(t => renderTile(host, t, nextId())))
+                : quiet ? null : h("p", { class: "sb-note" }, note));
     }
 
     function render() {
         const hosts = SB.sortHosts(state.hosts.map(x => Object.assign({}, x, { label: hostLabel(x) })));
         const rows = SB.buildBoard(hosts, Date.now());
         const active = document.activeElement;
-        const focusKey = active && active.dataset ? active.dataset.key : null;
+        /* a tile (data-key) or a control inside its card (data-focus): it gets the focus back */
+        const focusKey = active && active.dataset ? active.dataset.key || active.dataset.focus || null : null;
+        let seq = 0;
+        const nextId = () => ++seq;
 
         renderAlerts();
         const board = $("board");
@@ -442,10 +506,12 @@
                 h("span", { class: "az-empty__icon" }, icon("info-circle")),
                 h("h2", { class: "az-empty__title" }, T.emptyTitle),
                 h("p", { class: "az-empty__body" }, T.emptyBody))) : null,
-            rows.map((r, i) => renderRow(r, i, nothing)));
+            rows.map((r, i) => renderRow(r, i, nothing, nextId)));
         board.setAttribute("aria-busy", state.loading ? "true" : "false");
+        board.dataset.onlyNotable = state.onlyNotable ? "true" : "false";
         if (focusKey) {
-            const el = Array.from(board.querySelectorAll("[data-key]")).find(x => x.dataset.key === focusKey);
+            const el = Array.from(board.querySelectorAll("[data-key], [data-focus]"))
+                .find(x => x.dataset.key === focusKey || x.dataset.focus === focusKey);
             if (el && el.tagName === "BUTTON") el.focus();
         }
         $("meta").textContent = state.loadedAt ? T.loadedAt(fmtClock(state.loadedAt)) + " · " + T.hostCount(state.hosts.length) : "";
@@ -465,6 +531,13 @@
         /* for the tests: what the page found in the shell's document */
         $("board").dataset.multihost = MULTIHOST;
         $("refresh").addEventListener("click", () => load());
+        const notable = $("only-notable");
+        notable.checked = state.onlyNotable;
+        notable.addEventListener("change", () => {
+            state.onlyNotable = notable.checked;
+            saveOnlyNotable(state.onlyNotable);
+            render();
+        });
 
         const visible = () => !(cockpit.hidden !== undefined ? cockpit.hidden : document.hidden);
         const due = () => Date.now() - state.loadedAt >= REFRESH_MS;

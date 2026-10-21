@@ -23,6 +23,13 @@
         dropped: n => (n === 1 ? "1 Eintrag ausgelassen (ungültig)" : `${n} Einträge ausgelassen (ungültig)`),
         connection: "Verbindung",
         toHost: "Host öffnen",
+        onlyNotable: "Nur Auffälliges",
+        nothingNotable: "Nichts Auffälliges.",
+        itemsShow: n => `Alle ${n} Einträge`,
+        itemsHide: "Einträge ausblenden",
+        itemsOf: name => `Einträge von ${name}`,
+        version: v => `Version ${v}`,
+        newerElsewhere: v => `Auf anderen Hosts läuft Version ${v}`,
 
         words: {
             none: "Unbekannt",

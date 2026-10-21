@@ -84,8 +84,9 @@ row keeps what it showed before.
 | `COMMAND status --lang xx` | every host with the add-on | `host`, `superuser: "try"`, `err: "message"` |
 | `cockpit.jump("/PKG" + link, host)`, `cockpit.jump("/system", host)` | the shell | (navigation) |
 | the meta tag `allow-multihost` in the shell's document (`window.parent`) | the browser | read once at the start |
+| `localStorage` `status-board:only-notable` (`"1"` or `"0"`) | the browser | the switch "Only what needs attention" |
 
-Nothing else: no shell scripts, no `superuser: "require"`, no writes. `test/page.test.js` and
+Nothing else: no shell scripts, no `superuser: "require"`, no writes on any host. `test/page.test.js` and
 `test/ui_test.py` check this list.
 
 **Jumps to other hosts need the host switcher.** cockpit-ws writes `AllowMultiHost` into the shell's
@@ -129,6 +130,27 @@ Key locked, Add-ons unreadable). The key figure stands on its own, its title bel
 add-ons send titles such as "New versions" whatever the value, so "1" over "New versions" reads
 right where "1 New versions" would not. Without the host switcher only this host's tiles open
 something (see "Every call the page makes").
+
+**Entries.** A tile of a valid answer with more than one item folds out all of them below it, in
+the add-on's order: title, value, the item's own label (its state at that time; out of date makes
+it at least a warning, labelled Out of date when the age alone made it one), detail, and since when
+it is out of date where that differs from the tile's own time. An item with a `link` is a button
+that opens the add-on at that place, with the same checks and the same rule for other hosts as a
+click on the tile. The list exists only while it is open (a hidden button would still be a control
+on a phone), and the tiles that are open stay open when the board loads again (`state.open`, by
+`data-key`; not kept across page loads). The cards of a row are as high as the highest; while one
+is open, the others keep their own height.
+
+**Only what needs attention** (`notable()` in `lib/status.js`): the switch leaves out tiles whose
+state is below Notice (OK, Unknown, Not installed, No status, No access), and keeps tiles that are
+still loading. A row's label still says the whole row; a row left without tiles says "Nothing that
+needs attention". The browser keeps the switch in `localStorage`; without storage it starts off.
+
+**Versions.** A tile names the add-on's version in its facts. `buildBoard()` compares the versions
+of the same add-on on all hosts (`compareVersions()`: three numbers, a suffix such as `~dev…` or
+`-rc1` before the release; anything else is not compared) and gives every older tile the newest one
+as `newer`, shown as "Version X runs on other hosts". It only compares what the hosts send; it does
+not look for releases.
 
 ## Why a page of its own
 
