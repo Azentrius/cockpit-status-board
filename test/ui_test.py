@@ -513,12 +513,14 @@ with sync_playwright() as p:
             !!li.querySelector('button.sb-item__link'), (li.querySelector('.sb-item__value') || {}).innerText || null])""", key)
 
     def row_rects(host):
-        """Where the cards of a row and the parts inside them are: none of it may move. (A toggle's
-        width follows its text, "All 5 entries" or "Hide the entries".)"""
+        """Where the cards of a row and the parts inside them are in the document (a click scrolls
+        its target into view): none of it may move. (A toggle's width follows its text, "All 5
+        entries" or "Hide the entries".)"""
         return page.evaluate("""h => Array.from(document.querySelectorAll('[data-host="' + h + '"] .sb-cell')).map(c =>
             [c.querySelector('.sb-tile').dataset.key].concat(Array.from(c.querySelectorAll('.sb-tile, .sb-tile__meta, .sb-tile__toggle'))
                 .map(e => { const r = e.getBoundingClientRect();
-                    return [Math.round(r.x), Math.round(r.y), e.matches('.sb-tile__toggle') ? null : Math.round(r.width), Math.round(r.height)]; })))""", host)
+                    return [Math.round(r.x + window.scrollX), Math.round(r.y + window.scrollY),
+                            e.matches('.sb-tile__toggle') ? null : Math.round(r.width), Math.round(r.height)]; })))""", host)
 
     key = "public-host/security"
     check(toggle(key).inner_text().strip() == "All 5 entries" and toggle(key).get_attribute("aria-expanded") == "false" and entries(key) == [],
