@@ -466,6 +466,42 @@ with sync_playwright() as p:
     check(page.inner_text("#refresh").strip() == "Refresh", "other languages fall back to English")
     page.context.close()
 
+    # ---------- the add-ons' real answers, in English: the README's screenshots ----------
+    page = open_page(browser, "scenario=real&lang=en")
+    check(rows(page) == ["localhost", "build-host", "claw-host", "public-host"], "the real scenario's hosts: " + repr(rows(page)))
+    order = page.evaluate("""() => Array.from(document.querySelectorAll('.sb-host')).map(s =>
+        Array.from(s.querySelectorAll('.sb-tile')).map(t => t.dataset.key.split('/')[1]))""")
+    check(all(o == ["cronjobs", "image-updates", "security", "update-gaps"] for o in order), "four columns on every host: " + repr(order))
+    real = {"cronjobs": ("danger", "Problem", "1", "Failed jobs (last 24 hours)"),
+            "image-updates": ("info", "Notice", "2", "Updates available"),
+            "security": ("danger", "Problem", "1", "Container hardening"),
+            "update-gaps": ("warning", "Warning", "6", "Held packages")}
+    for name, (state, word, value, title) in real.items():
+        key = "public-host/" + name
+        figure = page.evaluate("""k => { const t = document.querySelector('[data-key="' + k + '"]');
+            return [t.querySelector('.sb-tile__value').innerText, t.querySelector('.sb-tile__title').innerText]; }""", key)
+        check(tile_label(page, key) == [LABEL[state], word, True] and figure == [value, title],
+              key + ": the add-on's real answer: " + repr([tile_label(page, key), figure]))
+    figure = page.evaluate("""() => document.querySelector('[data-key="build-host/security"] .sb-tile__value').innerText""")
+    check(figure == "5", "the Security Monitor on build-host: five containers with the Docker socket: " + repr(figure))
+    check(tile_label(page, "claw-host/image-updates")[1] == "Not installed", "claw-host lacks the Image Update Monitor")
+    check(not re.search(r"[äöüÄÖÜß„“]", page.inner_text("body")), "the real answers in English have no German")
+    tile(page, "public-host/security").click()
+    check(mock(page, "jumps")[-1] == ["/security#/containers", "public-host"],
+          "a click opens the Security Monitor at its key item: " + json.dumps(mock(page, "jumps")))
+    check(labels_right(page) == [], "every label stands at the right edge of its tile: " + repr(labels_right(page)))
+    shot(page, "readme-board")
+    no_problems(page, "real")
+    page.context.close()
+    page = open_page(browser, "scenario=real&lang=en", dark=True)
+    shot(page, "readme-board-dark")
+    no_problems(page, "real, dark")
+    page.context.close()
+    page = open_page(browser, "scenario=real&lang=en", width=390, height=844)
+    shot(page, "readme-board-phone", full=False)
+    no_problems(page, "real, phone")
+    page.context.close()
+
     # ---------- dark, and on a phone ----------
     page = open_page(browser, dark=True)
     check(page.evaluate("document.documentElement.classList.contains('pf-v6-theme-dark')"), "follows Cockpit's dark style")

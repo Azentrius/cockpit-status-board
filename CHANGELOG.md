@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 – 2026-10-19
+## 0.1.0 – 2026-10-21
 
 The first version: the status of the Azentrius add-ons on every host of the host switcher, on one
 page.

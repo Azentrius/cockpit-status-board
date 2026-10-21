@@ -141,8 +141,8 @@ make packages     # dist/*.deb and dist/*.rpm (needs dpkg-deb and rpmbuild), rep
 ```
 
 `python3 test/serve.py` serves the page with the stand-in at
-`http://127.0.0.1:8773/pkg/status-board/index.html` (`?scenario=hostile`, `broken` or `empty`,
-`?lang=en`). The fixtures in `test/fixtures` are written for 2026-10-19 19:00 UTC; the browser
+`http://127.0.0.1:8773/pkg/status-board/index.html` (`?scenario=real`, `hostile`, `broken` or
+`empty`, `?lang=en`). The fixtures in `test/fixtures` are written for 2026-10-19 19:00 UTC; the browser
 tests set their clock to it. The shared design files in `src/` are byte-identical copies from
 Cron Jobs (`tools/design-files.sha256`); never change them here.
 
