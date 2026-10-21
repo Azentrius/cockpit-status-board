@@ -131,15 +131,18 @@ add-ons send titles such as "New versions" whatever the value, so "1" over "New 
 right where "1 New versions" would not. Without the host switcher only this host's tiles open
 something (see "Every call the page makes").
 
-**Entries.** A tile of a valid answer with more than one item folds out all of them below it, in
-the add-on's order: title, value, the item's own label (its state at that time; out of date makes
-it at least a warning, labelled Out of date when the age alone made it one), detail, and since when
-it is out of date where that differs from the tile's own time. An item with a `link` is a button
-that opens the add-on at that place, with the same checks and the same rule for other hosts as a
-click on the tile. The list exists only while it is open (a hidden button would still be a control
-on a phone), and the tiles that are open stay open when the board loads again (`state.open`, by
-`data-key`; not kept across page loads). The cards of a row are as high as the highest; while one
-is open, the others keep their own height.
+**Entries.** A tile of a valid answer with more than one item opens all of them in a panel, in the
+add-on's order: title, value, the item's own label (its state at that time; out of date makes it at
+least a warning, labelled Out of date when the age alone made it one), detail, and since when it is
+out of date where that differs from the tile's own time. An item with a `link` is a button that
+opens the add-on at that place, with the same checks and the same rule for other hosts as a click
+on the tile. The panel spans the whole row of the grid and goes below the row of its card
+(`grid-auto-flow: row dense`; the cards after it in the source still fill that row first), so the
+cards keep their size and nothing in the row moves when it opens or closes; only the rows below
+move down. In version 0.2.0 the entries opened inside the card, and the other cards of the row
+jumped to a new height. The card and its panel share the border colour. The panel exists only while
+it is open (a hidden button would still be a control on a phone), and open tiles stay open when the
+board loads again (`state.open`, by `data-key`; not kept across page loads).
 
 **Only what needs attention** (`notable()` in `lib/status.js`): the switch leaves out tiles whose
 state is below Notice (OK, Unknown, Not installed, No status, No access), and keeps tiles that are

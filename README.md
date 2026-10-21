@@ -28,9 +28,10 @@ and changes nothing on any host; a click on a tile opens the add-on on its host.
   in a version without the status contract ("No status") or with an answer the board cannot use
   ("Status unreadable", with the reason). Data older than the add-on allows (`stale_after`) makes
   the tile a warning, "out of date since …".
-- **Every entry of a tile:** "All 5 entries" folds out what the add-on reports, each entry with its
-  label, value and detail; an entry with a place in the add-on opens it on a click (the Security
-  Monitor's SSH, for example), not only the key figure's.
+- **Every entry of a tile:** "All 5 entries" opens what the add-on reports in a panel below the
+  row, each entry with its label, value and detail; an entry with a place in the add-on opens it on
+  a click (the Security Monitor's SSH, for example), not only the key figure's. The tiles of the row
+  stay as they are.
 - **Only what needs attention:** a switch in the header leaves out the tiles in OK, Unknown, Not
   installed, No status and No access. The browser keeps the choice.
 - **Versions:** each tile names the add-on's version and says so when another host runs a newer

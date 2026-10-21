@@ -25,7 +25,7 @@
 (function () {
     "use strict";
 
-    const VERSION = "0.2.0";
+    const VERSION = "0.2.1";
     const SB = window.StatusBoard;
     const ICONS = window.AzIcons;
     const REFRESH_MS = 5 * 60 * 1000;
@@ -428,27 +428,31 @@
             since ? h("span", { class: "sb-item__detail" }, since) : null);
     }
 
-    /* Every entry of an answer, folded away below the tile (only when there is more than the key
-       item). The list exists only while it is open: a hidden button would still count. */
-    function renderItems(host, tile, key, go, id) {
-        if (tile.kind !== "status" || tile.eval.items.length < 2) return null;
-        const open = state.open.has(key);
-        const listId = "items-" + id;
-        const toggle = h("button", {
+    /* The toggle below a tile that has more than its key item; it opens or closes the panel. */
+    function renderToggle(tile, key, open, panelId) {
+        return h("div", { class: "sb-tile__more" }, h("button", {
             class: "az-btn az-btn--link az-btn--sm sb-tile__toggle", type: "button", "data-focus": key + "#items",
-            "aria-expanded": open ? "true" : "false", "aria-controls": open ? listId : null,
+            "aria-expanded": open ? "true" : "false", "aria-controls": open ? panelId : null,
             onclick: () => {
                 if (state.open.has(key)) state.open.delete(key);
                 else state.open.add(key);
                 render();
             },
-        }, icon(open ? "angle-down" : "angle-right"), open ? T.itemsHide : T.itemsShow(tile.eval.items.length));
-        return h("div", { class: "sb-tile__more" }, toggle,
-            open ? h("ul", { class: "sb-items", id: listId, "aria-label": T.itemsOf(tile.label) },
-                tile.eval.items.map(item => renderItem(host, tile, key, item, go))) : null);
+        }, icon(open ? "angle-down" : "angle-right"), open ? T.itemsHide : T.itemsShow(tile.eval.items.length)));
     }
 
-    /* A card per tile: the tile itself (a button when a click opens something), then its entries. */
+    /* Every entry of an answer, in a panel across the whole row below the tile's row of cards: the
+       cards keep their size, so nothing in the row moves when it opens or closes. It exists only
+       while it is open (a hidden button would still count). */
+    function renderPanel(host, tile, key, go, panelId) {
+        const titleId = panelId + "-title";
+        return h("section", { class: "az-card sb-panel", id: panelId, "data-items-for": key, "aria-labelledby": titleId },
+            h("h3", { class: "sb-panel__title", id: titleId }, T.itemsOf(tile.label)),
+            h("ul", { class: "sb-items" }, tile.eval.items.map(item => renderItem(host, tile, key, item, go))));
+    }
+
+    /* A card per tile: the tile itself (a button when a click opens something), then the toggle of
+       its entries; while they are open, the panel follows the card in the grid. */
     function renderTile(host, tile, id) {
         const key = host.key + "/" + (tile.pkg || tile.kind);
         if (tile.kind === "loading") return h("div", { class: "az-card sb-cell" }, h("div", { class: "sb-tile", "data-key": key }, text(T.loading)));
@@ -459,7 +463,12 @@
             label(tile.state, T.words[tile.word])), tileParts(tile, go)];
         const main = go ? h("button", { class: "sb-tile", type: "button", "data-key": key, onclick: () => jumpTo(host, tile) }, parts)
             : h("div", { class: "sb-tile", "data-key": key }, parts);
-        return h("div", { class: "az-card sb-cell" }, main, renderItems(host, tile, key, go, id));
+        const entries = tile.kind === "status" && tile.eval.items.length >= 2;
+        const open = entries && state.open.has(key);
+        const panelId = "items-" + id;
+        const card = h("div", { class: "az-card sb-cell" + (open ? " sb-cell--open" : "") }, main,
+            entries ? renderToggle(tile, key, open, panelId) : null);
+        return open ? [card, renderPanel(host, tile, key, go, panelId)] : card;
     }
 
     /* The row's label: the most severe state of its add-ons, or why the host could not be read. */
