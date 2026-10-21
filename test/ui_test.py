@@ -486,11 +486,11 @@ with sync_playwright() as p:
     check(figure == "5", "the Security Monitor on build-host: five containers with the Docker socket: " + repr(figure))
     check(tile_label(page, "claw-host/image-updates")[1] == "Not installed", "claw-host lacks the Image Update Monitor")
     check(not re.search(r"[äöüÄÖÜß„“]", page.inner_text("body")), "the real answers in English have no German")
+    check(labels_right(page) == [], "every label stands at the right edge of its tile: " + repr(labels_right(page)))
+    shot(page, "readme-board")
     tile(page, "public-host/security").click()
     check(mock(page, "jumps")[-1] == ["/security#/containers", "public-host"],
           "a click opens the Security Monitor at its key item: " + json.dumps(mock(page, "jumps")))
-    check(labels_right(page) == [], "every label stands at the right edge of its tile: " + repr(labels_right(page)))
-    shot(page, "readme-board")
     no_problems(page, "real")
     page.context.close()
     page = open_page(browser, "scenario=real&lang=en", dark=True)
