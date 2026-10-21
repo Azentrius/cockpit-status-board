@@ -271,6 +271,63 @@ t("the most important item", () => {
     assert.strictEqual(SB.evaluate(st, NOW).key.id, "b", "the most severe, one with a value first");
 });
 
+/* ---------- the entries a tile folds out ---------- */
+
+t("every entry in the add-on's order, with its state at the time", () => {
+    const st = SB.validateStatus(read("status/real-security.json"), "security").status;
+    const ev = SB.evaluate(st, NOW);
+    assert.deepStrictEqual(ev.items.map(i => [i.id, i.state, i.word, i.link, i.staleAt]), [
+        ["exposure", "warning", "warning", "#/exposure", null],
+        ["ssh", "info", "info", "#/ssh", null],
+        ["logins", "ok", "ok", "#/logins", null],
+        ["containers", "danger", "danger", "#/containers", null],
+        ["scan", "ok", "ok", null, null],
+    ]);
+    assert.deepStrictEqual(ev.items.map(i => [i.title, i.value]).slice(0, 2), [["Reachable from the internet", "10"], ["SSH", null]]);
+    /* an hour after the check every entry is out of date: at least a warning, a danger stays one */
+    const later = SB.evaluate(st, NOW + 3600e3);
+    assert.deepStrictEqual(later.items.map(i => [i.id, i.state, i.word]), [
+        ["exposure", "warning", "warning"], ["ssh", "warning", "stale"], ["logins", "warning", "stale"],
+        ["containers", "danger", "danger"], ["scan", "warning", "stale"],
+    ]);
+    assert.ok(later.items.every(i => i.staleAt === Date.UTC(2026, 9, 19, 19, 52)), "out of date since checked_at + stale_after");
+    assert.deepStrictEqual(st.items.map(i => i.state), ["warning", "info", "ok", "danger", "ok"], "the answer itself stays as it came");
+});
+
+t("an entry out of date on its own", () => {
+    const st = SB.validateStatus(read("status/good-image-updates-stale.json"), "image-updates").status;
+    const ev = SB.evaluate(st, NOW);
+    assert.deepStrictEqual(ev.items.map(i => [i.id, i.state, i.word]), [["updates", "warning", "stale"]]);
+    assert.strictEqual(ev.items[0].staleAt, ev.staleSince);
+});
+
+/* ---------- only what needs attention ---------- */
+
+t("notable: notices, warnings and problems, and hosts still loading", () => {
+    const tile = (kind, state) => ({ kind, state });
+    assert.deepStrictEqual(
+        [["status", "danger"], ["status", "warning"], ["status", "info"], ["status", "ok"], ["status", "none"],
+         ["missing", "none"], ["nostatus", "none"], ["noaccess", "none"], ["error", "warning"], ["rejected", "warning"],
+         ["unreachable", "danger"], ["locked", "warning"], ["discovery", "warning"], ["loading", "none"]]
+            .map(([k, s]) => SB.notable(tile(k, s))),
+        [true, true, true, false, false, false, false, false, true, true, true, true, true, true]);
+});
+
+/* ---------- versions ---------- */
+
+t("compareVersions", () => {
+    const c = SB.compareVersions;
+    assert.strictEqual(c("0.20.0", "0.3.0"), 1, "numbers, not text");
+    assert.strictEqual(c("2.8.0", "2.8.1"), -1);
+    assert.strictEqual(c("1.0.0", "1.0.0"), 0);
+    assert.strictEqual(c("v1.2.3", "1.2.3"), 0);
+    assert.strictEqual(c("0.1.0~dev.a5215aa", "0.1.0"), -1, "a build before the release");
+    assert.strictEqual(c("0.1.0", "0.1.0-rc1"), 1);
+    assert.strictEqual(c("0.1.0-rc1", "0.1.0-rc2"), -1);
+    assert.strictEqual(c("0.2.0~dev", "0.1.9"), 1);
+    ["", "1.2", "latest", "1.2.x", null, 3].forEach(x => assert.strictEqual(c(x, "1.0.0"), null, JSON.stringify(x)));
+});
+
 /* ---------- failed calls ---------- */
 
 t("classifyFailure", () => {
@@ -534,6 +591,35 @@ t("buildBoard: nothing anywhere", () => {
 t("buildBoard: an out-of-date tile says so", () => {
     const rows = SB.buildBoard([okHost("a", true, [["image-updates", "image-updates"]], { "image-updates": status("good-image-updates-stale.json") })], NOW);
     assert.deepStrictEqual(kinds(rows[0]), [["image-updates", "status", "warning", "stale"]]);
+});
+
+t("buildBoard: a tile says when another host runs a newer version", () => {
+    const rows = SB.buildBoard([
+        okHost("a", true, [["update-gaps", "update-gaps"], ["image-updates", "image-updates"]],
+               { "update-gaps": status("good-update-gaps.json"), "image-updates": status("good-image-updates-stale.json") }),
+        okHost("b", false, [["update-gaps", "update-gaps"], ["image-updates", "image-updates"]],
+               { "update-gaps": status("real-update-gaps.json"), "image-updates": status("good-image-updates.json") }),
+        okHost("c", false, [["image-updates", "image-updates"]], { "image-updates": status("real-image-updates.json") }),
+    ], NOW);
+    const newer = key => row(rows, key).tiles.map(x => [x.pkg, x.status.version, x.newer || null]);
+    assert.deepStrictEqual(newer("a"), [["image-updates", "0.19.1", "0.23.0"], ["update-gaps", "0.1.0", "0.2.0"]]);
+    assert.deepStrictEqual(newer("b"), [["image-updates", "0.20.0", "0.23.0"], ["update-gaps", "0.2.0", null]]);
+    assert.deepStrictEqual(row(rows, "c").tiles.filter(x => x.kind === "status").map(x => x.newer || null), [null], "the newest says nothing");
+});
+
+t("buildBoard: versions it cannot compare say nothing", () => {
+    const odd = version => {
+        const s = status("good-cronjobs-ok.json");
+        s.status = Object.assign({}, s.status, { version });
+        return s;
+    };
+    const rows = SB.buildBoard([
+        okHost("a", true, [["cronjobs", "cronjobs"]], { cronjobs: odd("latest") }),
+        okHost("b", false, [["cronjobs", "cronjobs"]], { cronjobs: odd(null) }),
+        okHost("c", false, [["cronjobs", "cronjobs"]], { cronjobs: odd("2.8.0") }),
+        okHost("d", false, [["cronjobs", "cronjobs"]], { cronjobs: odd("2.8.0") }),
+    ], NOW);
+    assert.deepStrictEqual(rows.map(r => r.tiles[0].newer || null), [null, null, null, null]);
 });
 
 console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);

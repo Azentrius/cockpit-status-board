@@ -162,6 +162,8 @@
          byAge       true when only the age made it a warning
          key         the most important item: the most severe one (out of date counts as
                      warning), one with a value before one without, else the first
+         items       every item in the add-on's order, each with its state at that time (out of
+                     date: at least warning), staleAt (or null) and the word of its label
          checkedAt   the time of the data: the status's own, else the newest item's */
     function evaluate(status, now) {
         let staleSince = null;
@@ -176,7 +178,7 @@
                     state = worse(state, "warning");
                 }
             }
-            return { item, index, state, staleAt };
+            return { item, index, state, staleAt, word: staleAt !== null && rank(item.state) < RANK.warning ? "stale" : state };
         });
         const reported = worse(status.state, stateOfItems(status.items));
         const state = staleSince === null ? reported : worse(reported, "warning");
@@ -188,6 +190,7 @@
             staleSince,
             byAge: staleSince !== null && rank(reported) < RANK.warning,
             key: top ? Object.assign({}, top.item, { state: top.state, staleAt: top.staleAt }) : null,
+            items: ranked.map(r => Object.assign({}, r.item, { state: r.state, staleAt: r.staleAt, word: r.word })),
             checkedAt: status.checkedAt !== null ? status.checkedAt : (times.length ? Math.max.apply(null, times) : null),
         };
     }
@@ -302,6 +305,28 @@
 
     /* ---------- the board ---------- */
 
+    /* A version as add-ons send it: "0.20.0", "2.8.1", "0.1.0~dev.a5215aa". */
+    const VERSION_RE = /^v?(\d{1,6})\.(\d{1,6})\.(\d{1,6})(.*)$/;
+
+    /* -1, 0 or 1 as version a comes before, equals or follows b; null when one of them is no such
+       version. A suffix ("~dev…", "-rc1") comes before the same version without one. */
+    function compareVersions(a, b) {
+        const x = typeof a === "string" ? VERSION_RE.exec(a) : null;
+        const y = typeof b === "string" ? VERSION_RE.exec(b) : null;
+        if (!x || !y) return null;
+        for (let i = 1; i <= 3; i++) {
+            const d = Number(x[i]) - Number(y[i]);
+            if (d) return d < 0 ? -1 : 1;
+        }
+        if (x[4] === y[4]) return 0;
+        if (!x[4] || !y[4]) return x[4] ? -1 : 1;
+        return x[4] < y[4] ? -1 : 1;
+    }
+
+    /* Whether a tile needs attention: a notice, a warning or a problem (out of date included), or
+       a host still loading. OK, Unknown, Not installed, No status and No access do not. */
+    const notable = tile => tile.kind === "loading" || rank(tile.state) >= RANK.info;
+
     const byName = (a, b) => a.sortLabel.localeCompare(b.sortLabel, "en", { sensitivity: "base" }) || (a.pkg < b.pkg ? -1 : a.pkg > b.pkg ? 1 : 0);
 
     /* What a host's tile of one add-on is, from the result of its status call. */
@@ -335,7 +360,9 @@
        "nostatus" where it is, in a version without the status entry.
        Names: a tile carries the label its own host sends (else the one of its manifest), so a
        host can name only its own tiles. Tiles are sorted, and "missing" tiles named, by the label
-       of the first host that has one, this host first. */
+       of the first host that has one, this host first.
+       Versions: a status tile whose add-on is older than the newest version of the same add-on
+       on another host carries that version as `newer`. */
     function buildBoard(hosts, now) {
         const readable = h => h.result.reach === "ok" && h.result.discovery === "ok";
         const nameOn = (r, pkg) => {
@@ -353,7 +380,7 @@
         });
         Object.keys(labels).forEach(pkg => { labels[pkg] = labels[pkg] || pkg; });
 
-        return hosts.map(host => {
+        const rows = hosts.map(host => {
             const r = host.result;
             let tiles;
             if (r.reach === "loading") tiles = [{ kind: "loading", state: "none", word: null, jump: false }];
@@ -375,6 +402,17 @@
             const state = tiles.reduce((s, t) => worse(s, t.state), "none");
             return { host, state, tiles };
         });
+
+        const versioned = [].concat(...rows.map(row => row.tiles))
+            .filter(t => t.kind === "status" && compareVersions(t.status.version, t.status.version) === 0);
+        const newest = {};
+        versioned.forEach(t => {
+            if (!own(newest, t.pkg) || compareVersions(t.status.version, newest[t.pkg]) > 0) newest[t.pkg] = t.status.version;
+        });
+        versioned.forEach(t => {
+            if (compareVersions(t.status.version, newest[t.pkg]) < 0) t.newer = newest[t.pkg];
+        });
+        return rows;
     }
 
     /* The order of the hosts: this host first, then by label as in the host switcher. */
@@ -404,7 +442,7 @@
         rank, worse, cleanText, parseTime,
         validateStatus, stateOfItems, evaluate, classifyFailure,
         packageOfManifestPath, statusEntry, menuLabel, statusArgv, packagesOf,
-        connectionString, parseMachines, buildBoard, sortHosts, reachOf,
+        connectionString, parseMachines, buildBoard, sortHosts, reachOf, compareVersions, notable,
     };
     if (typeof module === "object" && module.exports) module.exports = api;
     else root.StatusBoard = api;

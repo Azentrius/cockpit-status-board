@@ -78,6 +78,19 @@ t("jumps to other hosts only with the host switcher", () => {
     assert.ok(app.includes("const go = !!tile.jump && (host.own || OTHER_HOSTS);"), "tiles of other hosts are no buttons without it");
 });
 
+t("an entry opens its place only through jumpTo, which checks package and link", () => {
+    assert.ok(app.includes("onclick: () => jumpTo(host, tile, item.link)"), "the entry's button");
+    assert.ok(app.includes('const path = "/" + tile.pkg + (SB.LINK_RE.test(place) ? place : "");'), "the link checked again");
+    assert.ok(app.includes("const go = !!tile.jump && (host.own || OTHER_HOSTS);") && app.includes("go && item.link"),
+        "entries of other hosts open nothing without the host switcher");
+});
+
+t("the browser keeps only the language read and the switch, and storage may fail", () => {
+    const uses = app.match(/localStorage\.[a-zA-Z]+\([^)]*\)/g) || [];
+    assert.deepStrictEqual(uses, ['localStorage.getItem("cockpit.lang")', "localStorage.getItem(NOTABLE_KEY)", 'localStorage.setItem(NOTABLE_KEY, on ? "1" : "0")']);
+    app.split("\n").filter(l => l.includes("localStorage")).forEach(l => assert.ok(/try \{/.test(l), "inside try: " + l.trim()));
+});
+
 t("manifest.json", () => {
     const m = JSON.parse(read("manifest.json"));
     assert.strictEqual(m.menu.index.label, "Status Board");

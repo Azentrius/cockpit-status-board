@@ -487,11 +487,89 @@ with sync_playwright() as p:
     check(tile_label(page, "claw-host/image-updates")[1] == "Not installed", "claw-host lacks the Image Update Monitor")
     check(not re.search(r"[äöüÄÖÜß„“]", page.inner_text("body")), "the real answers in English have no German")
     check(labels_right(page) == [], "every label stands at the right edge of its tile: " + repr(labels_right(page)))
+
+    # versions: a tile says when another host runs a newer version of its add-on
+    hints = dict(page.evaluate("""() => Array.from(document.querySelectorAll('.sb-tile__hint'))
+        .map(x => [x.closest('.sb-tile').dataset.key, x.innerText.trim()])"""))
+    check(hints == {"localhost/cronjobs": "Version 2.8.1 runs on other hosts", "localhost/image-updates": "Version 0.23.0 runs on other hosts",
+                    "localhost/update-gaps": "Version 0.2.0 runs on other hosts", "build-host/cronjobs": "Version 2.8.1 runs on other hosts",
+                    "build-host/image-updates": "Version 0.23.0 runs on other hosts", "build-host/update-gaps": "Version 0.2.0 runs on other hosts",
+                    "claw-host/cronjobs": "Version 2.8.1 runs on other hosts", "claw-host/update-gaps": "Version 0.2.0 runs on other hosts"},
+          "older add-ons say which version runs elsewhere, the newest and the Security Monitor (0.1.0 everywhere) say nothing: " + repr(hints))
+    check(page.inner_text('[data-key="public-host/security"] .sb-tile__meta') == "Checked 8 minutes ago · Version 0.1.0",
+          "the version in the tile's facts: " + page.inner_text('[data-key="public-host/security"] .sb-tile__meta'))
     shot(page, "readme-board")
     tile(page, "public-host/security").click()
     check(mock(page, "jumps")[-1] == ["/security#/containers", "public-host"],
           "a click opens the Security Monitor at its key item: " + json.dumps(mock(page, "jumps")))
+
+    # every entry of a tile, folded out below it
+    def toggle(key):
+        return page.locator(f'[data-key="{key}"] + .sb-tile__more .sb-tile__toggle')
+
+    def entries(key):
+        return page.evaluate("""k => Array.from(document.querySelectorAll('[data-key="' + k + '"] + .sb-tile__more .sb-item')).map(li => [
+            li.dataset.item, li.querySelector('.az-label').innerText.trim(), (li.querySelector('.sb-item__link, .sb-item__title') || {}).innerText,
+            !!li.querySelector('button.sb-item__link'), (li.querySelector('.sb-item__value') || {}).innerText || null])""", key)
+
+    key = "public-host/security"
+    check(toggle(key).inner_text().strip() == "All 5 entries" and toggle(key).get_attribute("aria-expanded") == "false" and entries(key) == [],
+          "folded away at first, the toggle says how many: " + toggle(key).inner_text())
+    check(page.evaluate("() => document.querySelectorAll('[data-key=\"claw-host/image-updates\"] + .sb-tile__more').length") == 0,
+          "a tile without an answer has nothing to fold out")
+    toggle(key).focus()
+    page.keyboard.press("Enter")
+    page.wait_for_timeout(50)
+    got = entries(key)
+    check(got == [["exposure", "Warning", "Reachable from the internet", True, "10"], ["ssh", "Notice", "SSH", True, None],
+                  ["logins", "OK", "Logins", True, "0"], ["containers", "Problem", "Container hardening", True, "1"],
+                  ["scan", "OK", "Check", False, None]],
+          "every entry in the add-on's order, with label, title and value; an entry without a place opens nothing: " + repr(got))
+    check(toggle(key).get_attribute("aria-expanded") == "true" and toggle(key).inner_text().strip() == "Hide the entries"
+          and page.evaluate("document.activeElement.dataset.focus") == key + "#items",
+          "the toggle with the keyboard; it keeps the focus")
+    check(page.evaluate("""k => { const t = document.querySelector('[data-key="' + k + '"] + .sb-tile__more .sb-tile__toggle');
+        const l = document.getElementById(t.getAttribute('aria-controls')); return l && l.getAttribute('aria-label'); }""", key) == "Entries of Security Monitor",
+          "the toggle controls the list, which is named")
+    page.locator('[data-key="public-host/security"] + .sb-tile__more [data-item="ssh"] .sb-item__link').click()
+    check(mock(page, "jumps")[-1] == ["/security#/ssh", "public-host"], "an entry opens its own place: " + json.dumps(mock(page, "jumps")))
+    page.click("#refresh")
+    wait_idle(page)
+    check(len(entries(key)) == 5, "an open tile stays open when the board loads again")
+
+    # only what needs attention: OK, Unknown, Not installed, No status and No access are left out
+    page.click(".az-switch")
+    page.wait_for_timeout(50)
+    keys = page.evaluate("() => Array.from(document.querySelectorAll('.sb-tile')).map(t => t.dataset.key)")
+    hidden = ["localhost/cronjobs", "build-host/cronjobs", "claw-host/cronjobs", "claw-host/image-updates"]
+    check(page.is_checked("#only-notable") and len(keys) == 12 and not any(k in keys for k in hidden),
+          "the switch leaves out what needs no attention: " + repr(keys))
+    check(host_label(page, "claw-host") == [LABEL["danger"] + " az-label--strong", "Problem"], "the row's label still says the whole row")
+    check(len(entries(key)) == 5, "an open tile stays open with the switch")
+    shot(page, "readme-board-details")
     no_problems(page, "real")
+    # the browser keeps the choice: a new page of the same session starts with it
+    again = page.context.new_page()
+    again.problems = []
+    again.on("pageerror", lambda e: again.problems.append("pageerror: " + str(e)))
+    again.clock.install(time=NOW)
+    again.goto(BASE + "?scenario=real&lang=en")
+    wait_idle(again)
+    check(again.is_checked("#only-notable") and again.evaluate("document.querySelector('#board').dataset.onlyNotable") == "true"
+          and again.evaluate("() => document.querySelectorAll('.sb-tile').length") == 12, "the switch is kept in the browser")
+    again.click(".az-switch")
+    check(again.evaluate("() => document.querySelectorAll('.sb-tile').length") == 16, "and off again shows every tile")
+    no_problems(again, "real, again")
+    page.context.close()
+
+    # a host left without tiles says so
+    page = open_page(browser, "scenario=hostile")
+    page.click(".az-switch")
+    page.wait_for_timeout(50)
+    note = page.evaluate("""() => { const s = document.querySelector('[data-host="localhost"]');
+        return [s.querySelectorAll('.sb-tile').length, (s.querySelector('.sb-note') || {}).innerText]; }""")
+    check(note == [0, "Nichts Auffälliges."], "a host with nothing that needs attention says so: " + repr(note))
+    check(host_label(page, "localhost") == [LABEL["ok"] + " az-label--strong", "In Ordnung"], "and its label still says OK")
     page.context.close()
     page = open_page(browser, "scenario=real&lang=en", dark=True)
     shot(page, "readme-board-dark")

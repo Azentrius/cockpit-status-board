@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.0 – 2026-10-21
+
+A tile shows every entry of its add-on, the board can hide what needs no attention, and it says
+where an add-on is older than on the other hosts.
+
+- **Every entry of a tile:** "All 5 entries" folds out what the add-on reports, each entry with
+  its label in the status language, its value and its detail, out of date since when if it is.
+  An entry with a place in the add-on opens it on a click (the Security Monitor's SSH, for
+  example), not only the key figure's. Open tiles stay open when the board loads again.
+- **Only what needs attention:** a switch in the header leaves out the tiles in OK, Unknown, Not
+  installed, No status and No access; a host left without tiles says "Nothing that needs
+  attention", its label still says the whole row. The browser keeps the choice.
+- **Versions:** each tile names the add-on's version, and says so when another host runs a newer
+  one ("Version 0.5.0 runs on other hosts"). The board compares what the hosts send; it does not
+  look for releases.
+
 ## 0.1.0 – 2026-10-21
 
 The first version: the status of the Azentrius add-ons on every host of the host switcher, on one

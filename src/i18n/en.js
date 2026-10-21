@@ -25,6 +25,13 @@
         dropped: n => (n === 1 ? "1 entry left out (invalid)" : `${n} entries left out (invalid)`),
         connection: "Connection",
         toHost: "Open the host",
+        onlyNotable: "Only what needs attention",
+        nothingNotable: "Nothing that needs attention.",
+        itemsShow: n => `All ${n} entries`,
+        itemsHide: "Hide the entries",
+        itemsOf: name => `Entries of ${name}`,
+        version: v => `Version ${v}`,
+        newerElsewhere: v => `Version ${v} runs on other hosts`,
 
         /* The word of a tile's label, by state or kind. */
         words: {
