@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1 – 2026-10-22
+
+The tiles of a row stay put when a tile's entries open or close.
+
+- **Entries in a panel below the row:** "All 5 entries" opens a panel across the whole row, below
+  the row of its card, instead of inside the card. In 0.2.0 the other cards of the row shrank to
+  their own height when one opened and grew back when it closed, so their figures, ages and toggles
+  jumped. Now only the rows below move down. The card and its panel share the border colour.
+
 ## 0.2.0 – 2026-10-21
 
 A tile shows every entry of its add-on, the board can hide what needs no attention, and it says

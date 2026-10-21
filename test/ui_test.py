@@ -503,24 +503,40 @@ with sync_playwright() as p:
     check(mock(page, "jumps")[-1] == ["/security#/containers", "public-host"],
           "a click opens the Security Monitor at its key item: " + json.dumps(mock(page, "jumps")))
 
-    # every entry of a tile, folded out below it
+    # every entry of a tile, in a panel across the row below the tile's row of cards
     def toggle(key):
         return page.locator(f'[data-key="{key}"] + .sb-tile__more .sb-tile__toggle')
 
     def entries(key):
-        return page.evaluate("""k => Array.from(document.querySelectorAll('[data-key="' + k + '"] + .sb-tile__more .sb-item')).map(li => [
+        return page.evaluate("""k => Array.from(document.querySelectorAll('[data-items-for="' + k + '"] .sb-item')).map(li => [
             li.dataset.item, li.querySelector('.az-label').innerText.trim(), (li.querySelector('.sb-item__link, .sb-item__title') || {}).innerText,
             !!li.querySelector('button.sb-item__link'), (li.querySelector('.sb-item__value') || {}).innerText || null])""", key)
+
+    def row_rects(host):
+        """Where the cards of a row and the parts inside them are in the document (a click scrolls
+        its target into view): none of it may move. (A toggle's width follows its text, "All 5
+        entries" or "Hide the entries".)"""
+        return page.evaluate("""h => Array.from(document.querySelectorAll('[data-host="' + h + '"] .sb-cell')).map(c =>
+            [c.querySelector('.sb-tile').dataset.key].concat(Array.from(c.querySelectorAll('.sb-tile, .sb-tile__meta, .sb-tile__toggle'))
+                .map(e => { const r = e.getBoundingClientRect();
+                    return [Math.round(r.x + window.scrollX), Math.round(r.y + window.scrollY),
+                            e.matches('.sb-tile__toggle') ? null : Math.round(r.width), Math.round(r.height)]; })))""", host)
 
     key = "public-host/security"
     check(toggle(key).inner_text().strip() == "All 5 entries" and toggle(key).get_attribute("aria-expanded") == "false" and entries(key) == [],
           "folded away at first, the toggle says how many: " + toggle(key).inner_text())
     check(page.evaluate("() => document.querySelectorAll('[data-key=\"claw-host/image-updates\"] + .sb-tile__more').length") == 0,
           "a tile without an answer has nothing to fold out")
+    before = row_rects("public-host")
     toggle(key).focus()
     page.keyboard.press("Enter")
     page.wait_for_timeout(50)
     got = entries(key)
+    check(row_rects("public-host") == before, "opening moves nothing in the row: no card, figure, age or toggle jumps")
+    panel = page.evaluate("""k => { const p = document.querySelector('[data-items-for="' + k + '"]'), row = p.parentElement.getBoundingClientRect();
+        const r = p.getBoundingClientRect(), cards = Array.from(p.parentElement.querySelectorAll('.sb-cell')).map(c => c.getBoundingClientRect());
+        return [Math.round(r.width) === Math.round(row.width), Math.round(r.top) > Math.max(...cards.map(c => Math.round(c.bottom)))]; }""", key)
+    check(panel == [True, True], "the panel spans the row, below all of its cards: " + repr(panel))
     check(got == [["exposure", "Warning", "Reachable from the internet", True, "10"], ["ssh", "Notice", "SSH", True, None],
                   ["logins", "OK", "Logins", True, "0"], ["containers", "Problem", "Container hardening", True, "1"],
                   ["scan", "OK", "Check", False, None]],
@@ -529,13 +545,25 @@ with sync_playwright() as p:
           and page.evaluate("document.activeElement.dataset.focus") == key + "#items",
           "the toggle with the keyboard; it keeps the focus")
     check(page.evaluate("""k => { const t = document.querySelector('[data-key="' + k + '"] + .sb-tile__more .sb-tile__toggle');
-        const l = document.getElementById(t.getAttribute('aria-controls')); return l && l.getAttribute('aria-label'); }""", key) == "Entries of Security Monitor",
-          "the toggle controls the list, which is named")
-    page.locator('[data-key="public-host/security"] + .sb-tile__more [data-item="ssh"] .sb-item__link').click()
+        const p = document.getElementById(t.getAttribute('aria-controls'));
+        return p && p.dataset.itemsFor === k && document.getElementById(p.getAttribute('aria-labelledby')).innerText; }""", key) == "Entries of Security Monitor",
+          "the toggle controls the panel, which is named by its heading")
+    page.locator('[data-items-for="public-host/security"] [data-item="ssh"] .sb-item__link').click()
     check(mock(page, "jumps")[-1] == ["/security#/ssh", "public-host"], "an entry opens its own place: " + json.dumps(mock(page, "jumps")))
     page.click("#refresh")
     wait_idle(page)
     check(len(entries(key)) == 5, "an open tile stays open when the board loads again")
+    # the first card of the row opened too: the cards after it still fill the row, the panels follow in order
+    toggle("public-host/cronjobs").click()
+    page.wait_for_timeout(50)
+    order = page.evaluate("""() => Array.from(document.querySelectorAll('[data-host="public-host"] .sb-tiles > *')).map(e =>
+        [e.matches('.sb-panel') ? 'panel:' + e.dataset.itemsFor : e.querySelector('.sb-tile').dataset.key, Math.round(e.getBoundingClientRect().top)])""")
+    tops = {k: t for k, t in order}
+    check(row_rects("public-host") == before and tops["panel:public-host/cronjobs"] < tops["panel:public-host/security"],
+          "two open tiles: the row stays, their panels below it in the order of the cards: " + repr(order))
+    toggle("public-host/cronjobs").click()
+    page.wait_for_timeout(50)
+    check(row_rects("public-host") == before, "closing moves nothing either")
 
     # only what needs attention: OK, Unknown, Not installed, No status and No access are left out
     page.click(".az-switch")
