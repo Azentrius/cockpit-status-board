@@ -5,7 +5,8 @@ tile per host and add-on. This file is the reference for authors of add-ons. Sta
 follow it (`src/lib/status.js`, `validateStatus`), and `test/fixtures/status` holds good, broken and
 hostile answers.
 
-Cron Jobs, Image Update Monitor (since 0.20.0), Update Gaps and Security Monitor implement it.
+Cron Jobs (since 2.8.1), Image Update Monitor (since 0.20.0), Update Gaps and Security Monitor
+(both since their first release, 0.1.0) implement it.
 
 ## Verb
 
@@ -135,10 +136,10 @@ tile goes.
 ## Optional: a state in Cockpit's menu
 
 The same `status.json` can give the add-on's own menu entry a symbol, on the host whose menu is
-shown. Image Update Monitor does this since 0.21.0 (`plugin/menu-status.js`), Update Gaps and Cron
-Jobs in the same way, and Security Monitor with its own `plugin/menu-status.js` since
-Azentrius/cockpit-security-monitor pull request 3 (`"preload": ["index"]`, `stale_after` one hour,
-so its symbol is at least a warning an hour after the last check).
+shown. Image Update Monitor does this since 0.21.0 (`plugin/menu-status.js`), Update Gaps since
+0.2.0 and Cron Jobs since 2.9.0 in the same way, and Security Monitor with its own
+`plugin/menu-status.js` since its first release, 0.1.0 (`"preload": ["index"]`, `stale_after` one
+hour, so its symbol is at least a warning an hour after the last check).
 
 - The page sets it with `cockpit.transport.control("notify", { page_status: { type, title } })`:
   `danger` becomes `error`, `warning` and `info` stay, `ok` and `none` send no symbol; the title is

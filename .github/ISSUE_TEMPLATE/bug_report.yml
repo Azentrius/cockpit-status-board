@@ -1,0 +1,89 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Bug report
+description: Something in Status Board does not work as described, or a tile shows a host or an add-on wrong.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Security problems do not belong here.** Report them privately as described in
+        [SECURITY.md](https://github.com/Azentrius/cockpit-status-board/blob/main/SECURITY.md).
+
+        This issue is public. Remove passwords, keys, host names, IP addresses, user names and other
+        private data from everything you paste, screenshots included.
+  - type: input
+    id: version
+    attributes:
+      label: Status Board version
+      description: >-
+        Shown in the page footer ("Status Board X.Y.Z"), or the output of `dpkg -s cockpit-status-board`
+        or `rpm -q cockpit-status-board`.
+      placeholder: "0.2.2"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system of the host with the board
+      placeholder: "Ubuntu 26.04"
+    validations:
+      required: true
+  - type: input
+    id: cockpit
+    attributes:
+      label: Cockpit version on the host with the board
+      description: In Cockpit under Help › About Web Console, or `cockpit-bridge --version`.
+    validations:
+      required: true
+  - type: textarea
+    id: hosts
+    attributes:
+      label: The hosts concerned
+      description: >-
+        For each host the issue is about: its operating system and Cockpit version, the add-ons and
+        their versions, and how it is reached (SSH key in the agent, `AllowMultiHost` on or off).
+        Use names like "host-a", not the real ones.
+    validations:
+      required: false
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+      description: For a wrong tile, say which host and add-on, and what the tile said.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Status Board in Cockpit on the host with the host switcher
+        2. Click "All 5 entries" on the tile of ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Relevant output
+      description: >-
+        For example the browser console, or the add-on's answer on the host concerned: the command in
+        the section `azentrius.status` of its `manifest.json`, run with `status --lang en`.
+        **Before pasting, remove passwords, keys, host names, IP addresses, user names and any other
+        private data.**
+      render: shell
+  - type: checkboxes
+    id: no-secrets
+    attributes:
+      label: Private data
+      options:
+        - label: >-
+            I have removed passwords, keys and any other secrets or private data from everything
+            above.
+          required: true

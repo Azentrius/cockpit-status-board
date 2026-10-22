@@ -2,6 +2,10 @@ Status Board, a Cockpit page with the status of the Azentrius add-ons on every h
 Copyright 2026 Azentrius
 Licensed under the Apache License, Version 2.0. See LICENSE.
 
+The shared Azentrius design files src/azentrius.css and
+src/azentrius-theme.js (identical in every Azentrius add-on, see
+tools/design-files.sha256) are part of this project under the same license.
+
 This project includes third-party material under its own license:
 
 DM Sans (src/DMSans.woff2, a Latin subset)
@@ -20,5 +24,7 @@ Red Hat Mono (src/RedHatMono.woff2, a Latin subset)
 Icons (src/icons.js): Font Awesome Free 5.15.4 (Solid) by Fonticons, Inc.
   (https://fontawesome.com), as shipped in @patternfly/react-icons 6.4.0
   (Red Hat, Inc.); the path data is unchanged.
-  Creative Commons Attribution 4.0 International, see
-  src/CC-BY-4.0-Font-Awesome.txt
+  Creative Commons Attribution 4.0 International (CC BY 4.0), see
+  src/CC-BY-4.0-Font-Awesome.txt (installed next to the page and as
+  /usr/share/doc/cockpit-status-board/CC-BY-4.0-Font-Awesome.txt) and
+  https://creativecommons.org/licenses/by/4.0/
