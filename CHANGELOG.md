@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.3 – 2026-10-23
+
+Two fixes from a review: an add-on with an unusual folder name no longer stops the board, and a
+status answer is cut off at 64 KiB while it arrives.
+
+- **A package named `constructor`:** an add-on in a folder named after a property every
+  JavaScript object has stopped the board while it built the tiles, and Refresh stayed disabled. Now it is a tile like any other, and hosts without it say "Not
+  installed" instead of "No status".
+- **Answers over 64 KiB:** the board read a status answer whole before it checked the size, so a
+  helper that kept writing filled the page's memory until the timeout. Now it reads the answer as
+  it arrives and closes the channel as soon as it passes 64 KiB; the tile says "The answer is
+  longer than 64 KiB." as before.
+
 ## 0.2.2 – 2026-10-22
 
 The entries of a tile line up.
