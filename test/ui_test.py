@@ -491,12 +491,12 @@ with sync_playwright() as p:
     # versions: a tile says when another host runs a newer version of its add-on
     hints = dict(page.evaluate("""() => Array.from(document.querySelectorAll('.sb-tile__hint'))
         .map(x => [x.closest('.sb-tile').dataset.key, x.innerText.trim()])"""))
-    check(hints == {"localhost/cronjobs": "Version 2.8.1 runs on other hosts", "localhost/image-updates": "Version 0.23.0 runs on other hosts",
-                    "localhost/update-gaps": "Version 0.2.0 runs on other hosts", "build-host/cronjobs": "Version 2.8.1 runs on other hosts",
-                    "build-host/image-updates": "Version 0.23.0 runs on other hosts", "build-host/update-gaps": "Version 0.2.0 runs on other hosts",
-                    "claw-host/cronjobs": "Version 2.8.1 runs on other hosts", "claw-host/update-gaps": "Version 0.2.0 runs on other hosts"},
-          "older add-ons say which version runs elsewhere, the newest and the Security Monitor (0.1.0 everywhere) say nothing: " + repr(hints))
-    check(page.inner_text('[data-key="public-host/security"] .sb-tile__meta') == "Checked 8 minutes ago · Version 0.1.0",
+    check(hints == {"localhost/cronjobs": "Version 2.9.0 runs on other hosts", "localhost/image-updates": "Version 0.24.1 runs on other hosts",
+                    "localhost/update-gaps": "Version 0.6.0 runs on other hosts", "build-host/cronjobs": "Version 2.9.0 runs on other hosts",
+                    "build-host/image-updates": "Version 0.24.1 runs on other hosts", "build-host/update-gaps": "Version 0.6.0 runs on other hosts",
+                    "claw-host/cronjobs": "Version 2.9.0 runs on other hosts", "claw-host/update-gaps": "Version 0.6.0 runs on other hosts"},
+          "older add-ons say which version runs elsewhere, the newest and the Security Monitor (0.2.0 everywhere) say nothing: " + repr(hints))
+    check(page.inner_text('[data-key="public-host/security"] .sb-tile__meta') == "Checked 8 minutes ago · Version 0.2.0",
           "the version in the tile's facts: " + page.inner_text('[data-key="public-host/security"] .sb-tile__meta'))
     shot(page, "readme-board")
     tile(page, "public-host/security").click()
