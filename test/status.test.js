@@ -623,4 +623,59 @@ t("buildBoard: versions it cannot compare say nothing", () => {
     assert.deepStrictEqual(rows.map(r => r.tiles[0].newer || null), [null, null, null, null]);
 });
 
+/* ---------- package names that every object inherits ---------- */
+
+t("buildBoard: packages named like inherited properties (constructor, tostring) are plain packages", () => {
+    const manifest = (label, name) => ({ menu: { index: { label } }, azentrius: { status: ["/usr/lib/cockpit-" + name + "/status", "status"] } });
+    const answer = (pkg, label, state) => ({ kind: "ok", status: SB.validateStatus(JSON.stringify(
+        { schema: 1, addon: pkg, label, state, items: [{ id: "x", state, title: "X", value: "1" }] }), pkg).status });
+    const host = (key, own, mans, results) => ({ key, own, label: key, connection: own ? null : key,
+        result: { reach: "ok", discovery: "ok", packages: SB.packagesOf(mans), results } });
+    const rows = SB.buildBoard([
+        host("a", true, { aaa: manifest("Alpha", "aaa"), constructor: manifest("Constructor", "constructor") },
+             { aaa: answer("aaa", "Alpha", "info"), constructor: answer("constructor", "Constructor", "warning") }),
+        host("b", false, { cronjobs: json("manifests/cronjobs.json") }, { cronjobs: status("good-cronjobs-ok.json") }),
+        host("c", false, { tostring: manifest("To String", "tostring") }, {}),
+    ], NOW);
+    assert.deepStrictEqual(rows[0].tiles.map(x => [x.pkg, x.label, x.kind, x.state]),
+        [["aaa", "Alpha", "status", "info"], ["constructor", "Constructor", "status", "warning"],
+         ["cronjobs", "Cron Jobs", "missing", "none"], ["tostring", "To String", "missing", "none"]]);
+    /* a host without them: not installed, not "no status" taken from Object.prototype */
+    assert.deepStrictEqual(rows[1].tiles.map(x => [x.pkg, x.kind]),
+        [["aaa", "missing"], ["constructor", "missing"], ["cronjobs", "status"], ["tostring", "missing"]]);
+    /* its own package, but no result: the call failed, not a result inherited from Object */
+    assert.deepStrictEqual(rows[2].tiles.find(x => x.pkg === "tostring").kind, "error");
+    rows.forEach(r => r.tiles.forEach(x => assert.strictEqual(typeof x.sortLabel, "string", x.pkg)));
+    assert.deepStrictEqual(Object.keys(SB.packagesOf({ constructor: manifest("C", "constructor"), valueof: manifest("V", "valueof") })), ["constructor", "valueof"]);
+});
+
+/* ---------- the output of a status call, as it streams in ---------- */
+
+t("outputCollector: chunks join up to the limit, past it nothing is kept", () => {
+    const c = SB.outputCollector(10);
+    assert.strictEqual(c.add("abc"), true);
+    assert.strictEqual(c.add("defg"), true);
+    assert.strictEqual(c.add("hij"), true, "exactly at the limit is still fine");
+    assert.deepStrictEqual([c.text(), c.size, c.tooLarge], ["abcdefghij", 10, false]);
+    assert.strictEqual(c.add("k"), false, "one character more is too much");
+    assert.deepStrictEqual([c.text(), c.tooLarge], ["", true], "and the buffer is dropped");
+    assert.strictEqual(c.add("more"), false, "later chunks are ignored");
+    assert.strictEqual(c.text(), "");
+});
+
+t("outputCollector: a valid answer in many chunks reads as in one, and the real limit is MAX_OUTPUT", () => {
+    const text = read("status/real-security.json");
+    const c = SB.outputCollector(SB.MAX_OUTPUT);
+    for (let i = 0; i < text.length; i += 7) assert.ok(c.add(text.slice(i, i + 7)));
+    assert.strictEqual(c.text(), text);
+    assert.strictEqual(SB.validateStatus(c.text(), "security").ok, true);
+    const big = SB.outputCollector(SB.MAX_OUTPUT);
+    assert.ok(big.add("x".repeat(SB.MAX_OUTPUT)), "64 KiB exactly");
+    assert.strictEqual(big.add("x"), false, "64 KiB and one");
+    const huge = SB.outputCollector(SB.MAX_OUTPUT);
+    let kept = 0;
+    for (let i = 0; i < 100 && huge.add("y".repeat(16384)); i++) kept++;
+    assert.deepStrictEqual([kept, huge.tooLarge, huge.text().length], [4, true, 0], "a helper that keeps printing is cut off after 64 KiB");
+});
+
 console.log(`${passed} passed${process.exitCode ? ", some FAILED" : ""}`);

@@ -220,13 +220,25 @@
     }
 
     /* The status of one add-on: always the checked command with "status --lang xx", unprivileged
-       unless the session has administrative access on that host. */
+       unless the session has administrative access on that host. The output is read as a stream
+       (without .stream() cockpit.spawn keeps all of it until the channel ends): once it goes past
+       SB.MAX_OUTPUT the channel is closed at once and the answer counts as too large. */
     function callStatus(host, pkg, command) {
         const proc = cockpit.spawn(SB.statusArgv(command, LANG), at(host, { superuser: "try", err: "message" }));
-        return withTimeout(proc, TIMEOUT_MS.status, () => proc.close("timeout")).then(output => {
-            const v = SB.validateStatus(output, pkg);
+        const output = SB.outputCollector(SB.MAX_OUTPUT);
+        let tooLarge = null;
+        const overflow = new Promise(resolve => { tooLarge = resolve; });
+        proc.stream(data => {
+            if (output.add(data)) return;
+            try { proc.close("too-large"); } catch (_) { /* closed already */ }
+            tooLarge({ kind: "invalid", reason: "too-large", detail: null });
+        });
+        const done = withTimeout(proc, TIMEOUT_MS.status, () => proc.close("timeout")).then(() => {
+            if (output.tooLarge) return { kind: "invalid", reason: "too-large", detail: null };
+            const v = SB.validateStatus(output.text(), pkg);
             return v.ok ? { kind: "ok", status: v.status } : { kind: "invalid", reason: v.reason, detail: v.detail };
-        }, SB.classifyFailure);
+        }, ex => (output.tooLarge ? { kind: "invalid", reason: "too-large", detail: null } : SB.classifyFailure(ex)));
+        return Promise.race([overflow, done]);
     }
 
     /* Everything of one host, as buildBoard() takes it. Never rejects. */

@@ -81,7 +81,7 @@ row keeps what it showed before.
 | `find /usr/share/cockpit -mindepth 2 -maxdepth 2 -name manifest.json` | other hosts | `host`, `err: "message"` |
 | read `/usr/share/cockpit/PKG/manifest.json` | other hosts | `host`, `syntax: JSON` |
 | read `/proc/sys/kernel/hostname` | every host | `host` |
-| `COMMAND status --lang xx` | every host with the add-on | `host`, `superuser: "try"`, `err: "message"` |
+| `COMMAND status --lang xx` | every host with the add-on | `host`, `superuser: "try"`, `err: "message"`; read as a stream, the channel closed at once past 64 KiB |
 | `cockpit.jump("/PKG" + link, host)`, `cockpit.jump("/system", host)` | the shell | (navigation) |
 | the meta tag `allow-multihost` in the shell's document (`window.parent`) | the browser | read once at the start |
 | `localStorage` `status-board:only-notable` (`"1"` or `"0"`) | the browser | the switch "Only what needs attention" |

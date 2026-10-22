@@ -195,6 +195,32 @@
         };
     }
 
+    /* The output of a status call as it arrives in chunks, never more than max characters (the
+       same count validateStatus() checks). add() returns false once the output went past max: the
+       caller then closes the channel, and what was kept is dropped, so the buffer stays bounded. */
+    function outputCollector(max) {
+        let parts = [];
+        let size = 0;
+        let over = false;
+        return {
+            add(data) {
+                if (over) return false;
+                const s = typeof data === "string" ? data : String(data);
+                size += s.length;
+                if (size > max) {
+                    over = true;
+                    parts = [];
+                    return false;
+                }
+                parts.push(s);
+                return true;
+            },
+            get tooLarge() { return over; },
+            get size() { return size; },
+            text() { return parts.join(""); },
+        };
+    }
+
     /* A status call that failed (a cockpit.spawn error) as a result for the board. */
     function classifyFailure(ex) {
         const e = ex || {};
@@ -365,20 +391,25 @@
        on another host carries that version as `newer`. */
     function buildBoard(hosts, now) {
         const readable = h => h.result.reach === "ok" && h.result.discovery === "ok";
+        /* Package names are keys from the hosts: "constructor" or "tostring" are valid ones, so a
+           lookup takes only what the host itself has (own properties), never what objects inherit. */
+        const pkgOf = (r, pkg) => (isObject(r.packages) && own(r.packages, pkg) ? r.packages[pkg] : null);
+        const resultOf = (r, pkg) => (isObject(r.results) && own(r.results, pkg) ? r.results[pkg] : null);
         const nameOn = (r, pkg) => {
-            const res = r.results[pkg];
-            return (res && res.kind === "ok" && res.status.label) || (r.packages[pkg] && r.packages[pkg].label) || null;
+            const res = resultOf(r, pkg);
+            const p = pkgOf(r, pkg);
+            return (res && res.kind === "ok" && res.status.label) || (p && p.label) || null;
         };
-        const labels = {};
+        const labels = new Map();
         hosts.filter(h => h.own).concat(hosts.filter(h => !h.own)).filter(readable).forEach(h => {
             const r = h.result;
             Object.keys(r.packages).forEach(pkg => {
                 const entry = r.packages[pkg].entry;
                 if (!entry || entry.unreadable) return;
-                labels[pkg] = labels[pkg] || nameOn(r, pkg);
+                if (!labels.get(pkg)) labels.set(pkg, nameOn(r, pkg));
             });
         });
-        Object.keys(labels).forEach(pkg => { labels[pkg] = labels[pkg] || pkg; });
+        labels.forEach((label, pkg) => { if (!label) labels.set(pkg, pkg); });
 
         const rows = hosts.map(host => {
             const r = host.result;
@@ -388,15 +419,15 @@
             else if (r.reach === "locked") tiles = [{ kind: "locked", state: "warning", word: "locked", jump: "host", identity: r.identity }];
             else if (r.discovery !== "ok") tiles = [{ kind: "discovery", state: "warning", word: "discovery", jump: false, message: r.message }];
             else {
-                tiles = Object.keys(labels).map(pkg => {
-                    const p = r.packages[pkg];
-                    const sortLabel = labels[pkg];
+                tiles = Array.from(labels.keys()).map(pkg => {
+                    const p = pkgOf(r, pkg);
+                    const sortLabel = labels.get(pkg);
                     const label = nameOn(r, pkg) || sortLabel;
                     if (!p) return { pkg, label, sortLabel, kind: "missing", state: "none", word: "missing", jump: false };
                     if (!p.entry) return { pkg, label, sortLabel, kind: "nostatus", state: "none", word: "nostatus", jump: true };
                     if (p.entry.unreadable) return tileOf(pkg, label, sortLabel, { kind: "manifest", message: p.entry.message }, now);
                     if (p.entry.rejected) return tileOf(pkg, label, sortLabel, { kind: "rejected" }, now);
-                    return tileOf(pkg, label, sortLabel, r.results[pkg] || { kind: "failed", exit: null, message: null }, now);
+                    return tileOf(pkg, label, sortLabel, resultOf(r, pkg) || { kind: "failed", exit: null, message: null }, now);
                 }).sort(byName);
             }
             const state = tiles.reduce((s, t) => worse(s, t.state), "none");
@@ -440,7 +471,7 @@
         STATES, RANK, LABEL_CLASS, LIMITS, MAX_ITEMS, MAX_PACKAGES, MAX_OUTPUT,
         PACKAGE_RE, ITEM_ID_RE, LINK_RE, COMMAND_RE,
         rank, worse, cleanText, parseTime,
-        validateStatus, stateOfItems, evaluate, classifyFailure,
+        validateStatus, stateOfItems, evaluate, classifyFailure, outputCollector,
         packageOfManifestPath, statusEntry, menuLabel, statusArgv, packagesOf,
         connectionString, parseMachines, buildBoard, sortHosts, reachOf, compareVersions, notable,
     };

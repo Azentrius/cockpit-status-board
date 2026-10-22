@@ -616,6 +616,45 @@ with sync_playwright() as p:
     no_problems(page, "real, phone")
     page.context.close()
 
+    # ---------- package names like "constructor", and status output at and past 64 KiB ----------
+    def edge_round(page, what):
+        keys = page.evaluate("() => Array.from(document.querySelectorAll('.sb-tile')).map(t => t.dataset.key)")
+        check(rows(page) == ["localhost", "big-host", "fine-host"], what + ": every host has its row: " + repr(rows(page)))
+        check(not page.is_disabled("#refresh"), what + ": Refresh is enabled again after loading")
+        for key, label, word, value in (("localhost/aaa", "Alpha", "Hinweis", "1"), ("localhost/constructor", "Constructor", "Achtung", "2")):
+            name = page.evaluate("k => (document.querySelector('[data-key=\"' + k + '\"] .sb-tile__name') || {}).innerText", key)
+            check(name == label and tile_label(page, key)[1] == word and value in tile_text(page, key),
+                  what + ": the package " + key + " shows as itself: " + repr([name, tile_label(page, key), tile_text(page, key)]))
+        for key in ("fine-host/aaa", "fine-host/constructor"):
+            check(tile_label(page, key)[1] == "Nicht installiert", what + ": " + key + " is not installed, not taken from Object: " + repr(tile_label(page, key)))
+        check(tile_label(page, "fine-host/cronjobs")[1] == "In Ordnung", what + ": another host is read as usual")
+        check(tile_label(page, "big-host/exact")[1] == "In Ordnung" and "Exact 65536" in tile_text(page, "big-host/exact"),
+              what + ": an answer of exactly 64 KiB, in 66 chunks, is read: " + tile_text(page, "big-host/exact"))
+        for key in ("big-host/over", "big-host/flood"):
+            check(tile_label(page, key)[1] == "Status nicht lesbar" and "länger als 64 KiB" in tile_text(page, key),
+                  what + ": " + key + " is too large: " + tile_text(page, key))
+        return keys
+
+    page = open_page(browser, "scenario=edge")
+    edge_round(page, "first load")
+    closes = mock(page, "closes")
+    over = [c for c in closes if c["problem"] == "too-large"]
+    check(sorted(c["args"][0] for c in over) == ["/usr/lib/cockpit-edge-flood/status", "/usr/lib/cockpit-edge-over/status"]
+          and all(c["streamed"] <= 65536 + 16384 for c in over),
+          "the channels past the limit are closed as soon as they go past it, the endless one too: " + json.dumps(over))
+    check(not any(c["args"][0].endswith("edge-exact/status") for c in closes), "the answer at the limit is not cut off")
+    page.click("#refresh")
+    wait_idle(page)
+    edge_round(page, "after Refresh")
+    check(len([c for c in mock(page, "closes") if c["problem"] == "too-large"]) == 4, "and again on Refresh")
+    no_problems(page, "edge")
+    page.context.close()
+    page = open_page(browser, "scenario=edge&chunk=65536")
+    check(tile_label(page, "big-host/over")[1] == "Status nicht lesbar" and tile_label(page, "big-host/exact")[1] == "In Ordnung",
+          "the same with large chunks: one chunk at the limit, the next one past it")
+    no_problems(page, "edge, large chunks")
+    page.context.close()
+
     # ---------- dark, and on a phone ----------
     page = open_page(browser, dark=True)
     check(page.evaluate("document.documentElement.classList.contains('pf-v6-theme-dark')"), "follows Cockpit's dark style")

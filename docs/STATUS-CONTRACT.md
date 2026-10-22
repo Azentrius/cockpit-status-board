@@ -68,7 +68,7 @@ What the board accepts:
 
 | Field | Required | Rule | Otherwise |
 |---|---|---|---|
-| (the answer) | yes | UTF-8 JSON object, at most 64 KiB | unreadable |
+| (the answer) | yes | UTF-8 JSON object, at most 64 KiB (the board closes the channel as soon as more arrives) | unreadable |
 | `schema` | yes | the number `1` | unreadable ("follows version N") |
 | `addon` | yes | `^[a-z0-9][a-z0-9-]{0,40}$` and the package folder the manifest was found in | unreadable |
 | `state` | yes | `none`, `ok`, `info`, `warning`, `danger` | unreadable |

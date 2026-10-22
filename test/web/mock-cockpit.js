@@ -6,7 +6,7 @@
  * test/serve.py): the manifests, and the output of each add-on's status verb, the German one
  * when there is a .de.json and the page asks with --lang de.
  *
- * Query parameters: scenario=default|real|hostile|broken|empty, badhosts=1 (the invalid names of the
+ * Query parameters: scenario=default|real|edge|hostile|broken|empty, chunk (characters per streamed chunk), badhosts=1 (the invalid names of the
  * machines fixture stay in the list), delay (ms per answer). Tests change window.__mock at run
  * time and read what the page did from it: calls, jumps, watches, unexpected. */
 (function () {
@@ -107,6 +107,23 @@
                 },
             };
         },
+        /* Package names that are also names of what every object inherits ("constructor"), and
+           status output at and past the limit of 64 KiB, streamed in chunks; one host that is fine. */
+        edge: () => ({
+            machines: { "big-host": { visible: true }, "fine-host": { visible: true } },
+            hosts: {
+                localhost: host("vpn-host", Object.assign(cockpitPackages(), {
+                    aaa: pkg("edge-aaa", { doc: { label: "Alpha", state: "info", items: [{ id: "a", state: "info", title: "A things", value: "1" }] } }),
+                    constructor: pkg("edge-constructor", { doc: { label: "Constructor", state: "warning", items: [{ id: "c", state: "warning", title: "C things", value: "2" }] } }),
+                })),
+                "big-host": host("big-host", {
+                    exact: pkg("edge-exact", { size: 65536 }),
+                    over: pkg("edge-over", { size: 65537 }),
+                    flood: pkg("edge-flood", { flood: 16384 }),
+                }),
+                "fine-host": host("fine-host", { cronjobs: pkg("cronjobs", "good-cronjobs-ok") }),
+            },
+        }),
         /* Hosts that send what they should not. */
         hostile: () => ({
             machines: {
@@ -170,6 +187,9 @@
         hosts: scenario.hosts,
         failMachines: false,
         delay: +(params.get("delay") || 30),
+        /* characters per chunk of a streamed status answer; closes: every channel the page closed */
+        chunk: +(params.get("chunk") || 1000),
+        closes: [],
         calls: [],
         jumps: [],
         watches: [],
@@ -209,7 +229,8 @@
         return m.azentrius && Array.isArray(m.azentrius.status) ? m.azentrius.status[0] : null;
     };
 
-    function answer(status, lang) {
+    /* size: a valid answer of exactly that many characters (padded), for the limit of 64 KiB. */
+    function answer(status, lang, name) {
         if (typeof status === "string") {
             const de = "status/" + status + "." + lang + ".json";
             return Object.prototype.hasOwnProperty.call(FIX, de) ? FIX[de] : fixture("status/" + status + ".json");
@@ -217,6 +238,12 @@
         if (!status) throw fail({ problem: "not-found", message: "" });
         if (status.text !== undefined) return status.text;
         if (status.huge) return JSON.stringify({ schema: 1, addon: "extra", state: "ok", items: [], pad: "x".repeat(70000) });
+        if (status.doc) return JSON.stringify(Object.assign({ schema: 1, addon: name }, status.doc));
+        if (status.size) {
+            const doc = { schema: 1, addon: name, label: "Exact " + status.size, state: "ok", summary: "padded", items: [], pad: "" };
+            doc.pad = "x".repeat(status.size - JSON.stringify(doc).length);
+            return JSON.stringify(doc);
+        }
         if (status.exit !== undefined) throw fail({ exit_status: status.exit, message: status.message || "" });
         throw fail({ problem: status.problem, message: status.message || "" });
     }
@@ -226,19 +253,40 @@
         M.calls.push({ kind: "spawn", host: target, args: args.slice(), opts: clone(opts || {}) });
         let settle = null;
         let closed = false;
+        let streamer = null;
+        let streamed = 0;
         const p = new Promise((resolve, reject) => { settle = { resolve, reject }; });
         const proc = {
             then: (a, b) => p.then(a, b),
             catch: f => p.catch(f),
             finally: f => p.finally(f),
-            stream() { return proc; },
+            /* As cockpit.js: with a stream callback the data goes there in chunks and the promise
+               resolves with nothing; without one, all of it comes when the channel ends. */
+            stream(fn) { streamer = fn; return proc; },
             input() { return proc; },
             close(problem) {
                 if (closed) return;
                 closed = true;
+                M.closes.push({ host: target, args: args.slice(), problem: problem || null, streamed, at: Date.now() });
                 setTimeout(() => settle.reject(fail({ problem: problem || "terminated", message: "" })), 5);
             },
         };
+        /* the answer of a status command: all at once, or in chunks of M.chunk to the stream */
+        const deliver = text => setTimeout(() => {
+            if (closed) return;
+            if (!streamer) { closed = true; settle.resolve(text); return; }
+            let pos = 0;
+            const next = () => {
+                if (closed) return;
+                if (pos >= text.length) { closed = true; settle.resolve(""); return; }
+                const piece = text.slice(pos, pos + M.chunk);
+                pos += piece.length;
+                streamed += piece.length;
+                streamer(piece);
+                setTimeout(next, 1);
+            };
+            next();
+        }, M.delay);
         const later = fn => setTimeout(() => {
             if (closed) return;
             closed = true;
@@ -262,7 +310,21 @@
             }
             const status = h.packages[name].status;
             if (status && status.hang) return proc;
-            later(() => answer(status, args[3]));
+            /* flood: a helper that keeps printing chunks of that size until the channel is closed */
+            if (status && status.flood) {
+                const piece = "x".repeat(status.flood);
+                const tick = () => {
+                    if (closed) return;
+                    streamed += piece.length;
+                    if (streamer) streamer(piece);
+                    setTimeout(tick, 2);
+                };
+                setTimeout(tick, M.delay);
+                return proc;
+            }
+            let text;
+            try { text = answer(status, args[3], name); } catch (ex) { later(() => { throw ex; }); return proc; }
+            deliver(text);
             return proc;
         }
         M.unexpected.push({ host: target, args: args.slice() });
