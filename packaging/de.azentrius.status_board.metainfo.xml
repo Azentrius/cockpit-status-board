@@ -24,6 +24,16 @@
       gezeigt. Ein Klick öffnet das Add-on auf seinem Host.
     </p>
     <p>
+      A tile folds out every entry of its add-on in a table below its row, and each entry opens its
+      own place in the add-on. A switch shows only what needs attention, and a tile says when
+      another host runs a newer version of its add-on.
+    </p>
+    <p xml:lang="de">
+      Eine Kachel klappt alle Einträge ihres Add-ons in einer Tabelle unter ihrer Zeile auf, und
+      jeder Eintrag öffnet seine eigene Stelle im Add-on. Ein Schalter zeigt nur Auffälliges, und
+      eine Kachel sagt, wenn auf einem anderen Host eine neuere Version ihres Add-ons läuft.
+    </p>
+    <p>
       The page only reads: it runs each add-on's status verb and never asks for administrative
       access. It belongs on the Cockpit host from which the others are reached.
     </p>
@@ -36,6 +46,24 @@
   <launchable type="cockpit-manifest">status-board</launchable>
   <url type="homepage">https://github.com/Azentrius/cockpit-status-board</url>
   <url type="bugtracker">https://github.com/Azentrius/cockpit-status-board/issues</url>
+  <!-- The pictures come from test/ui_test.py (CI artifact "screenshots", readme-board*.png), kept in docs/img/. -->
+  <screenshots>
+    <screenshot type="default">
+      <caption>A bastion with three hosts behind it, one tile per add-on</caption>
+      <caption xml:lang="de">Ein Bastion-Host mit drei Hosts dahinter, eine Kachel je Add-on</caption>
+      <image type="source" width="1280" height="1436">https://raw.githubusercontent.com/Azentrius/cockpit-status-board/main/docs/img/board.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Only what needs attention, with the entries of the Security Monitor folded out</caption>
+      <caption xml:lang="de">Nur Auffälliges, mit den aufgeklappten Einträgen des Security Monitor</caption>
+      <image type="source" width="1280" height="1863">https://raw.githubusercontent.com/Azentrius/cockpit-status-board/main/docs/img/board-details.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>The same board in the dark theme</caption>
+      <caption xml:lang="de">Dasselbe Board im dunklen Design</caption>
+      <image type="source" width="1280" height="1436">https://raw.githubusercontent.com/Azentrius/cockpit-status-board/main/docs/img/board-dark.png</image>
+    </screenshot>
+  </screenshots>
   <developer id="de.azentrius">
     <name>Azentrius</name>
   </developer>

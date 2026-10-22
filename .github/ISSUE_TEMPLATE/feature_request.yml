@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Feature request
+description: Suggest something Status Board should show, or an improvement of the board or the status contract.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check the open issues first. This issue is public: leave out host names, credentials and
+        other private data.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What does the board not show about your hosts or add-ons, or what stops you today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: >-
+        What should the board show, and where would it come from (the host switcher, the add-ons'
+        status, Cockpit)? A change to the status contract (docs/STATUS-CONTRACT.md) concerns every
+        add-on.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Other solutions or workarounds you have considered.
+  - type: dropdown
+    id: help
+    attributes:
+      label: Would you help?
+      options:
+        - "Yes, with a pull request"
+        - "Yes, by testing it on my hosts"
+        - "No"
+    validations:
+      required: false
