@@ -35,13 +35,14 @@ const EXPECT = {
     "good-update-gaps.json": { state: "warning", reported: "warning", items: 4, key: "held", value: "2", link: "#/held" },
     "good-update-gaps.de.json": { state: "warning", reported: "warning", items: 4, key: "held", value: "2" },
     /* What the add-ons answer, from their own verbs on the fixtures of their repositories (times
-       moved to just before NOW): the key figure and the place in the add-on its link opens. */
+       moved to just before NOW): the key figure and the place in the add-on its link opens.
+       Cron Jobs 2.9.0, Image Update Monitor 0.24.1, Update Gaps 0.6.0, Security Monitor 0.2.0. */
     "real-cronjobs.json": { state: "danger", reported: "danger", items: 3, key: "failed", value: "1", link: "#/overview/results" },
     "real-cronjobs.de.json": { state: "danger", reported: "danger", items: 3, key: "failed", value: "1", link: "#/overview/results" },
     "real-image-updates.json": { state: "info", reported: "info", items: 5, key: "updates", value: "2", link: "#/updates/update" },
     "real-image-updates.de.json": { state: "info", reported: "info", items: 5, key: "updates", value: "2", link: "#/updates/update" },
-    "real-update-gaps.json": { state: "warning", reported: "warning", items: 6, key: "held", value: "6", link: "#/held" },
-    "real-update-gaps.de.json": { state: "warning", reported: "warning", items: 6, key: "held", value: "6", link: "#/held" },
+    "real-update-gaps.json": { state: "warning", reported: "warning", items: 7, key: "held", value: "6", link: "#/held" },
+    "real-update-gaps.de.json": { state: "warning", reported: "warning", items: 7, key: "held", value: "6", link: "#/held" },
     "real-security.json": { state: "danger", reported: "danger", items: 5, key: "containers", value: "1", link: "#/containers" },
     "real-security.de.json": { state: "danger", reported: "danger", items: 5, key: "containers", value: "1", link: "#/containers" },
     /* the Security Monitor on its recordings of the other three hosts: vpn-host, build-host, claw-host */
@@ -602,8 +603,8 @@ t("buildBoard: a tile says when another host runs a newer version", () => {
         okHost("c", false, [["image-updates", "image-updates"]], { "image-updates": status("real-image-updates.json") }),
     ], NOW);
     const newer = key => row(rows, key).tiles.map(x => [x.pkg, x.status.version, x.newer || null]);
-    assert.deepStrictEqual(newer("a"), [["image-updates", "0.19.1", "0.23.0"], ["update-gaps", "0.1.0", "0.2.0"]]);
-    assert.deepStrictEqual(newer("b"), [["image-updates", "0.20.0", "0.23.0"], ["update-gaps", "0.2.0", null]]);
+    assert.deepStrictEqual(newer("a"), [["image-updates", "0.19.1", "0.24.1"], ["update-gaps", "0.1.0", "0.6.0"]]);
+    assert.deepStrictEqual(newer("b"), [["image-updates", "0.20.0", "0.24.1"], ["update-gaps", "0.6.0", null]]);
     assert.deepStrictEqual(row(rows, "c").tiles.filter(x => x.kind === "status").map(x => x.newer || null), [null], "the newest says nothing");
 });
 
