@@ -4,10 +4,13 @@
         "index": {
             "label": "Status Board",
             "path": "index.html",
-            "order": 15,
+            "order": 101,
             "keywords": [
                 { "matches": ["status", "board", "azentrius", "hosts", "add-ons", "addons", "overview",
                               "übersicht", "zustand", "lage"] }
+            ],
+            "docs": [
+                { "label": "Status Board", "url": "https://github.com/Azentrius/cockpit-status-board#readme" }
             ]
         }
     }
