@@ -77,8 +77,19 @@ jobs:
             test -f /usr/share/cockpit/status-board/manifest.json
             dnf remove -y -q cockpit-status-board
             test ! -e /usr/share/cockpit/status-board'
-      - name: Browser (Playwright, pinned in test/requirements.txt)
-        run: python -m playwright install --with-deps chromium
+      # Only the browser, from Playwright's CDN (seconds). Its system packages (--with-deps: fonts,
+      # xvfb) come by apt from the Ubuntu mirror, which once took twelve minutes for them and cut a
+      # job off at its time limit (Azentrius/cockpit-cronjobs#85). The runner image brings what
+      # Chromium needs (it has Google Chrome); the browser tests show if anything is missing. Each
+      # try gets four minutes, a hung one a second try.
+      - name: Browser (Chromium from Playwright's CDN, two tries)
+        timeout-minutes: 10
+        run: |
+          for try in 1 2; do
+            timeout --kill-after=10s 4m python -m playwright install chromium && exit 0
+            echo "::warning::playwright install failed or hung (try $try)"
+          done
+          exit 1
       # test/ui_test.py against test/web/mock-cockpit.js, served with Cockpit's CSP: the board of
       # the fixtures' hosts, hostile and broken answers, hosts that cannot be reached, a locked
       # key, a timeout, the reload every 5 minutes, English and German, dark, a phone.
@@ -157,10 +168,17 @@ jobs:
           sudo install -m 644 test/e2e/addon/manifest.json test/e2e/addon/index.html test/e2e/addon/probe.js /usr/share/cockpit/e2e/
           sudo install -m 755 test/e2e/addon/status /usr/lib/cockpit-e2e/status
           /usr/lib/cockpit-e2e/status status --lang en | python -m json.tool
-      - name: Check tools (pinned in test/requirements.txt) and the browser
+      - name: Check tools (pinned in test/requirements.txt)
+        run: pip install -r test/requirements.txt
+      # Only the browser, two tries of four minutes (see the job test).
+      - name: Browser (Chromium from Playwright's CDN, two tries)
+        timeout-minutes: 10
         run: |
-          pip install -r test/requirements.txt
-          python -m playwright install --with-deps chromium
+          for try in 1 2; do
+            timeout --kill-after=10s 4m python -m playwright install chromium && exit 0
+            echo "::warning::playwright install failed or hung (try $try)"
+          done
+          exit 1
       # Three names for this machine, as three hosts in the host switcher. The runner's user logs
       # in with a key that is only in the ssh-agent; e2elocked only with the encrypted key
       # ~/.ssh/id_ed25519, which is not in the agent (as after "ssh-add -D" on the bastion).
