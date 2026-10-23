@@ -36,6 +36,19 @@
         colDetail: "Details",
         version: v => `Version ${v}`,
         newerElsewhere: v => `Version ${v} runs on other hosts`,
+        coverage: "Coverage",
+        coverageCount: (n, total) => `${n} of ${total} add-ons checked`,
+        coverageGap: (n, word) => `${n} ${word}`,
+        coverageHosts: n => (n === 1 ? "1 host not read" : `${n} hosts not read`),
+        coverageComplete: "Complete",
+        hostCoverage: (n, total) => `${n} of ${total} add-ons checked`,
+        /* What keeps an add-on from counting as checked (lib/status.js, coverageOf). */
+        coverageWords: {
+            unchecked: "nothing checked",
+            stale: "out of date",
+            noaccess: "no access",
+            unreadable: "status unreadable",
+        },
 
         /* The word of a tile's label, by state or kind. */
         words: {
@@ -45,6 +58,7 @@
             warning: "Warning",
             danger: "Problem",
             stale: "Out of date",
+            unchecked: "Not checked",
             missing: "Not installed",
             nostatus: "No status",
             noaccess: "No access",
@@ -57,7 +71,7 @@
 
         missingText: "Installed on other hosts.",
         nostatusText: "This version of the add-on reports no status.",
-        noaccessText: "Without administrative access on this host the add-on has nothing to report.",
+        noaccessText: "Nothing is readable without administrative access. Usually the add-on has not checked yet, or its regular check is not set up.",
         rejectedText: "Its manifest names a status command outside `/usr/lib/cockpit-…`. The board does not run it.",
         lockedText: "Your SSH key is locked. Log in to this host once in the host switcher to unlock it.",
         lockedTextNoSwitcher: "Your SSH key is locked. Log in to Cockpit again, or unlock it with `ssh-add` in Cockpit's terminal.",

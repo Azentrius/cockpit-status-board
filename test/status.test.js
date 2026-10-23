@@ -308,10 +308,10 @@ t("notable: notices, warnings and problems, and hosts still loading", () => {
     const tile = (kind, state) => ({ kind, state });
     assert.deepStrictEqual(
         [["status", "danger"], ["status", "warning"], ["status", "info"], ["status", "ok"], ["status", "none"],
-         ["missing", "none"], ["nostatus", "none"], ["noaccess", "none"], ["error", "warning"], ["rejected", "warning"],
+         ["missing", "none"], ["nostatus", "none"], ["noaccess", "warning"], ["error", "warning"], ["rejected", "warning"],
          ["unreachable", "danger"], ["locked", "warning"], ["discovery", "warning"], ["loading", "none"]]
             .map(([k, s]) => SB.notable(tile(k, s))),
-        [true, true, true, false, false, false, false, false, true, true, true, true, true, true]);
+        [true, true, true, false, false, false, false, true, true, true, true, true, true, true]);
 });
 
 /* ---------- versions ---------- */
@@ -511,7 +511,7 @@ t("buildBoard: not installed, no status entry, no access", () => {
     const rows = board();
     assert.deepStrictEqual(kinds(row(rows, "localhost")), [
         ["cronjobs", "status", "ok", "ok"],
-        ["image-updates", "noaccess", "none", "noaccess"],
+        ["image-updates", "noaccess", "warning", "noaccess"],
         ["update-gaps", "missing", "none", "missing"],
     ]);
     assert.deepStrictEqual(kinds(row(rows, "claw-host")), [
@@ -592,6 +592,45 @@ t("buildBoard: nothing anywhere", () => {
 t("buildBoard: an out-of-date tile says so", () => {
     const rows = SB.buildBoard([okHost("a", true, [["image-updates", "image-updates"]], { "image-updates": status("good-image-updates-stale.json") })], NOW);
     assert.deepStrictEqual(kinds(rows[0]), [["image-updates", "status", "warning", "stale"]]);
+    assert.strictEqual(rows[0].tiles[0].coverage, "stale");
+});
+
+/* ---------- coverage ---------- */
+
+t("buildBoard: an answer that rates nothing is a warning, Not checked", () => {
+    const rows = SB.buildBoard([okHost("a", true, [["image-updates", "image-updates"]], { "image-updates": status("good-minimal.json") })], NOW);
+    assert.deepStrictEqual(kinds(rows[0]), [["image-updates", "status", "warning", "unchecked"]]);
+    assert.strictEqual(rows[0].tiles[0].coverage, "unchecked");
+    assert.ok(SB.notable(rows[0].tiles[0]), "it stays with only what needs attention");
+});
+
+t("coverage of every tile of the board", () => {
+    const rows = board();
+    const cov = key => row(rows, key).tiles.map(x => [x.pkg || x.kind, x.coverage]);
+    assert.deepStrictEqual(cov("localhost"), [["cronjobs", "checked"], ["image-updates", "noaccess"], ["update-gaps", null]]);
+    assert.deepStrictEqual(cov("claw-host"), [["cronjobs", "unreadable"], ["image-updates", null], ["update-gaps", null]],
+        "not installed and no status entry are no gap of a check");
+    assert.deepStrictEqual(cov("evil-host"), [["cronjobs", "unreadable"], ["image-updates", "unreadable"], ["update-gaps", null]]);
+    ["old-host", "locked-host", "dark-host", "new-host"].forEach(k => assert.deepStrictEqual(cov(k).map(c => c[1]), [null], k));
+    /* good-cronjobs-ok has an entry in state none (jobs without recording): no gap */
+    assert.ok(row(rows, "localhost").tiles[0].status.items.some(i => i.state === "none"));
+});
+
+t("coverage of every row", () => {
+    const rows = board();
+    assert.deepStrictEqual(row(rows, "localhost").coverage,
+        { total: 2, checked: 1, gaps: [{ pkg: "image-updates", label: "Image Update Monitor", coverage: "noaccess" }] });
+    assert.deepStrictEqual(row(rows, "public-host").coverage, { total: 3, checked: 3, gaps: [] });
+    assert.deepStrictEqual(row(rows, "claw-host").coverage, { total: 1, checked: 0, gaps: [{ pkg: "cronjobs", label: "Cron Jobs", coverage: "unreadable" }] });
+    ["old-host", "locked-host", "dark-host", "new-host"].forEach(k => assert.strictEqual(row(rows, k).coverage, null, k));
+});
+
+t("coverageSummary of the board", () => {
+    assert.deepStrictEqual(SB.coverageSummary(board()), {
+        total: 8, checked: 4, gaps: { unchecked: 0, stale: 0, noaccess: 1, unreadable: 3 }, unread: 3, unreadState: "danger" });
+    const fine = SB.buildBoard([okHost("a", true, [["cronjobs", "cronjobs"]], { cronjobs: status("good-cronjobs-ok.json") })], NOW);
+    assert.deepStrictEqual(SB.coverageSummary(fine), { total: 1, checked: 1, gaps: { unchecked: 0, stale: 0, noaccess: 0, unreadable: 0 }, unread: 0, unreadState: "none" });
+    assert.deepStrictEqual(SB.coverageSummary([]).total, 0);
 });
 
 t("buildBoard: a tile says when another host runs a newer version", () => {

@@ -125,6 +125,11 @@ The add-on's `state` is the most severe of its items' `danger`, `warning` and `i
 when one item is `ok`; else `none`. The board never shows a state better than the items say: an
 answer with `"state": "ok"` and an item in `danger` is a danger.
 
+**Nothing checked:** an answer whose state is `none` and that rates no item (every item `none`, or
+no item) tells that the add-on has checked nothing yet; the board shows it as a warning, "Not
+checked", and so it shows exit 77 ("No access"). Both count as gaps in the board's coverage. A
+single item in `none` next to rated ones is fine: it may mean "nothing to rate".
+
 **Out of date:** an item whose `checked_at` lies more than `stale_after` seconds back counts as a
 `warning`. The tile is then at least a warning, says "out of date since …", and its label reads
 "Out of date" when the age alone made it a warning.
