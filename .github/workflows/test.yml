@@ -9,8 +9,8 @@ permissions:
 
 jobs:
   # Everything that runs without a server: lint, the offline tests, the archive and the packages
-  # (each built twice to the same bytes), the packages installed on Debian and Fedora, and the
-  # page in a browser against a stand-in for Cockpit.
+  # (each built twice to the same bytes), the packages installed on Debian and Fedora (on Rocky
+  # Linux and AlmaLinux: job install), and the page in a browser against a stand-in for Cockpit.
   test:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -90,6 +90,44 @@ jobs:
         with:
           name: screenshots
           path: test/shots/
+
+  # The .rpm on the RHEL rebuilds Rocky Linux and AlmaLinux, 9 and 10, beyond the test job's
+  # Debian 13 and Fedora 43: installed with the distribution's own Cockpit (its version is
+  # printed), the files as the package database has them, the removal. No Cockpit runs there, so
+  # an installed package is not yet a tested system.
+  install:
+    name: install (${{ matrix.image }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["rockylinux/rockylinux:9", "rockylinux/rockylinux:10", "almalinux:9", "almalinux:10"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Packages
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends rpm > /dev/null
+          make packages
+      - name: Install, check and remove on ${{ matrix.image }}
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          docker run --rm -v "$PWD/dist:/dist:ro" "$IMAGE" sh -ec '
+            . /etc/os-release
+            echo "$PRETTY_NAME"
+            dnf install -y -q /dist/*.rpm
+            rpm -q cockpit-bridge
+            rpm -V cockpit-status-board
+            test -f /usr/share/cockpit/status-board/manifest.json
+            test -f /usr/share/cockpit/status-board/lib/status.js
+            test -f /usr/share/metainfo/de.azentrius.status_board.metainfo.xml
+            rpm -ql cockpit-status-board | grep -qx /usr/share/doc/cockpit-status-board/CC-BY-4.0-Font-Awesome.txt
+            dnf remove -y -q cockpit-status-board
+            test ! -e /usr/share/cockpit/status-board'
 
   # The board against a real Cockpit on the runner's throwaway VM, for what the stand-in can only
   # imitate: the host switcher's list from the bridge, the bridge's channels to other hosts over
