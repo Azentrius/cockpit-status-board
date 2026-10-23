@@ -4,7 +4,8 @@
  *   - nothing Cockpit's CSP blocks: no inline scripts, no event handler or style attributes,
  *   - every stylesheet url() names a file of the page (nothing from Cockpit's own files),
  *   - the page asks for no administrative access and watches no files,
- *   - the manifest is valid and has no status entry of its own.
+ *   - the manifest is valid and has no status entry of its own; its menu entry sits with the other
+ *     Azentrius add-ons and links the README.
  * Run with: node test/page.test.js */
 "use strict";
 const assert = require("assert");
@@ -96,6 +97,12 @@ t("manifest.json", () => {
     assert.strictEqual(m.menu.index.label, "Status Board");
     assert.strictEqual(m.menu.index.path, "index.html");
     assert.ok(!("azentrius" in m), "the board has no status of its own");
+    // One block at the end of System, after Services (100): Status Board 101 to Host Settings 106.
+    assert.strictEqual(m.menu.index.order, 101);
+    assert.ok(m.menu.index.keywords.some(k => k.matches.includes("azentrius")), "found by searching for azentrius");
+    // Shown in Cockpit's Help menu; the product name is not translated.
+    assert.deepStrictEqual(m.menu.index.docs,
+        [{ label: "Status Board", url: "https://github.com/Azentrius/cockpit-status-board#readme" }]);
 });
 
 t("SPDX headers", () => own.concat(["index.html", "app.css"]).forEach(f =>
