@@ -28,7 +28,8 @@
   <header class="az-page-header">
     <h1 class="az-page-title az-page-title--dot" id="page-title" tabindex="-1">Status Board</h1>
     <div class="az-page-actions">
-      <label class="az-switch"><input type="checkbox" id="only-notable"><span class="az-switch__track"></span><span class="az-switch__label" data-t="onlyNotable">Only what needs attention</span></label>
+      <!-- The switch belongs to the tab "Hosts and coverage"; app.js hides it on the other one. -->
+      <label class="az-switch" id="notable-wrap"><input type="checkbox" id="only-notable"><span class="az-switch__track"></span><span class="az-switch__label" data-t="onlyNotable">Only what needs attention</span></label>
       <span class="az-meta" id="meta"></span>
       <!-- Starts busy: the first load begins as soon as app.js runs. -->
       <button class="az-btn az-btn--primary" type="button" id="refresh" disabled aria-busy="true"><span data-icon="sync-alt"></span><span id="refresh-label" data-t="refreshing">Loading …</span></button>
@@ -37,10 +38,21 @@
 
   <div class="sb-alerts" id="alerts" aria-live="polite"></div>
 
-  <!-- How many add-ons answered in time with something rated; filled by app.js, outside the switch. -->
+  <!-- How many add-ons answered in time with something rated; filled by app.js, above both tabs and
+       outside the switch. -->
   <section class="az-card sb-coverage" id="coverage" aria-labelledby="coverage-title" hidden></section>
 
-  <div class="sb-board" id="board" role="region" aria-label="Hosts" data-t-label="boardLabel" aria-busy="true">
+  <!-- The two tabs; the selected one is part of the location (#/tasks, #/hosts). -->
+  <div class="az-tabs" id="tabs" role="tablist" aria-label="Views" data-t-label="tabsLabel">
+    <button class="az-tab" type="button" role="tab" id="tab-tasks" aria-controls="tasks" aria-selected="true"><span data-t="tabTasks">Needs attention</span><span class="sb-count" id="count-tasks"></span></button>
+    <button class="az-tab" type="button" role="tab" id="tab-hosts" aria-controls="board" aria-selected="false" tabindex="-1"><span data-t="tabHosts">Hosts and coverage</span></button>
+  </div>
+
+  <div class="sb-tasks" id="tasks" role="tabpanel" aria-labelledby="tab-tasks" aria-busy="true">
+    <p class="sb-note" data-t="loading">Loading …</p>
+  </div>
+
+  <div class="sb-board" id="board" role="tabpanel" aria-labelledby="tab-hosts" aria-busy="true" hidden>
     <p class="sb-note" data-t="loading">Loading …</p>
   </div>
 

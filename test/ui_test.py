@@ -59,7 +59,9 @@ def wait_idle(page):
     page.wait_for_timeout(80)
 
 
-def open_page(browser, query="", width=1280, height=900, dark=False, cookie=None):
+def open_page(browser, query="", width=1280, height=900, dark=False, cookie=None, tab="hosts"):
+    """The board at BASE?query. tab: the location the page opens with (#/hosts, the rows and
+    tiles most checks look at; None for none, which shows the tasks)."""
     ctx = browser.new_context(viewport={"width": width, "height": height}, timezone_id="Europe/Berlin", locale="de-DE")
     if dark:
         ctx.add_init_script("localStorage.setItem('shell:style', 'dark')")
@@ -70,7 +72,7 @@ def open_page(browser, query="", width=1280, height=900, dark=False, cookie=None
     page.on("console", lambda m: page.problems.append(m.text) if m.type in ("error", "warning") else None)
     page.on("pageerror", lambda e: page.problems.append("pageerror: " + str(e)))
     page.clock.install(time=NOW)
-    page.goto(BASE + ("?" + query if query else ""))
+    page.goto(BASE + ("?" + query if query else "") + ("#/" + tab if tab else ""))
     wait_idle(page)
     return page
 
@@ -128,10 +130,11 @@ def labels_right(page):
 SHELL_FRAME = "cockpit1:localhost/status-board"
 
 
-def open_in_shell(browser, multihost, query=""):
+def open_in_shell(browser, multihost, query="", tab="hosts"):
     """The board in the frame of a stand-in for Cockpit's shell (test/serve.py, /shell.html), whose
     document carries the meta tag allow-multihost as cockpit-ws writes it from AllowMultiHost.
-    query goes on to the board (scenario=…). Returns the shell's page and the board's frame."""
+    query goes on to the board (scenario=…); tab "hosts" clicks that tab once it has loaded.
+    Returns the shell's page and the board's frame."""
     ctx = browser.new_context(viewport={"width": 1280, "height": 900}, timezone_id="Europe/Berlin", locale="de-DE")
     page = ctx.new_page()
     page.problems = []
@@ -141,7 +144,45 @@ def open_in_shell(browser, multihost, query=""):
     page.goto(f"http://127.0.0.1:{PORT}/shell.html?multihost={multihost}" + ("&" + query if query else ""))
     frame = page.frame(name=SHELL_FRAME)
     wait_idle(frame)
+    if tab == "hosts":
+        frame.click("#tab-hosts")
+        wait_js(frame, "document.querySelector('.sb-host')")
     return page, frame
+
+
+def tasks(page):
+    """The tasks as the tab shows them, in order."""
+    return page.evaluate("""() => Array.from(document.querySelectorAll('.sb-task')).map(t => ({
+        key: t.dataset.task, group: t.closest('.sb-group').dataset.group,
+        label: [t.querySelector('.sb-task__head .az-label').className, t.querySelector('.sb-task__head .az-label').innerText.trim()],
+        title: t.querySelector('.sb-task__title').innerText, isnew: (t.querySelector('.sb-chip--new') || {}).innerText || null,
+        where: t.querySelector('.sb-task__where').innerText,
+        chips: Array.from(t.querySelectorAll('.sb-task__why .sb-chip')).map(c => c.innerText),
+        detail: (t.querySelector('.sb-task__detail') || {}).innerText || null,
+        sub: (t.querySelector('.sb-task__sub') || {}).innerText || null,
+        facts: Array.from(t.querySelectorAll('.sb-task__facts dt')).map(dt => [dt.innerText, dt.nextElementSibling.innerText]),
+        button: (t.querySelector('.sb-task__act button') || {}).innerText || null }))""")
+
+
+def task_button(page, key):
+    return page.locator(f'[data-task="{key}"] .sb-task__act button')
+
+
+def folds(page):
+    """Each folded section: its name, number, whether it is open, and its table while it is."""
+    return page.evaluate("""() => Array.from(document.querySelectorAll('.sb-fold')).map(f => {
+        const b = f.querySelector('.sb-fold__toggle');
+        return { fold: f.dataset.fold, title: b.querySelector('span').innerText, count: b.querySelector('.sb-count').innerText,
+                 open: b.getAttribute('aria-expanded'), head: Array.from(f.querySelectorAll('th')).map(th => th.innerText),
+                 rows: Array.from(f.querySelectorAll('tbody tr')).map(tr => Array.from(tr.children).map(td => td.innerText)) }; })""")
+
+
+def tab_state(page):
+    return page.evaluate("""() => ({ hash: location.hash,
+        selected: Array.from(document.querySelectorAll('[role=tab]')).filter(t => t.getAttribute('aria-selected') === 'true').map(t => t.id),
+        shown: Array.from(document.querySelectorAll('[role=tabpanel]')).filter(p => !p.hidden).map(p => p.id),
+        rows: document.querySelectorAll('.sb-host').length, tasks: document.querySelectorAll('.sb-task').length,
+        switch: !document.querySelector('#notable-wrap').hidden })""")
 
 
 LABEL = {"none": "az-label", "ok": "az-label az-label--success", "info": "az-label az-label--info",
@@ -166,6 +207,9 @@ with sync_playwright() as p:
     check(page.inner_text(".az-signature__meta").startswith("Status Board " + VERSION) and "vpn-host" in page.inner_text(".az-signature__meta"),
           "signature with version and host: " + page.inner_text(".az-signature__meta"))
     check(page.evaluate("document.documentElement.lang") == "de", "html lang")
+    ts = tab_state(page)
+    check(ts == {"hash": "#/hosts", "selected": ["tab-hosts"], "shown": ["board"], "rows": 6, "tasks": 0, "switch": True},
+          "opened at #/hosts: the tab Hosts and coverage with its switch, nothing in the other tab: " + repr(ts))
 
     check(rows(page) == ["localhost", "build-host", "claw-host", "locked-host", "old-host", "public-host"],
           "this host first, then by label as in the host switcher: " + repr(rows(page)))
@@ -230,7 +274,7 @@ with sync_playwright() as p:
         return { hidden: c.hidden, place: c.previousElementSibling.id + '|' + c.nextElementSibling.id,
                  title: c.querySelector('h2').innerText, figure: c.querySelector('.sb-coverage__figure').innerText,
                  labels: Array.from(c.querySelectorAll('.az-label')).map(l => [l.className, l.innerText.trim()]) }; }""")
-    check(cov == {"hidden": False, "place": "alerts|board", "title": "Abdeckung", "figure": "6 von 9 Add-ons geprüft",
+    check(cov == {"hidden": False, "place": "alerts|tabs", "title": "Abdeckung", "figure": "6 von 9 Add-ons geprüft",
                   "labels": [[LABEL["warning"], "1 Status nicht lesbar"], [LABEL["warning"], "1 kein Zugriff"], [LABEL["warning"], "1 veraltet"],
                              [LABEL["danger"], "2 Hosts nicht gelesen"]]},
           "the board's coverage: add-ons checked, what keeps the others from it, hosts not read: " + repr(cov))
@@ -356,6 +400,15 @@ with sync_playwright() as p:
     check("ssh-add" in t and "Host-Umschalter" not in t and "Host öffnen" not in t, "a locked key, without the host switcher: " + t)
     check("Problem" in tile_text(f, "public-host/cronjobs"), "the other hosts are still read")
     shot(shell, "board-no-switcher")
+    # the tasks of other hosts open nothing either
+    f.click("#tab-tasks")
+    wait_js(f, "document.querySelector('.sb-task')")
+    listed = [x["key"] for x in tasks(f)]
+    buttons = [x["key"] for x in tasks(f) if x["button"]]
+    check(len(listed) > 5 and buttons == ["localhost/image-updates/item:updates"],
+          "without the host switcher only this host's tasks have a button: " + repr(buttons) + " of " + repr(listed))
+    task_button(f, "localhost/image-updates/item:updates").click()
+    check(mock(f, "jumps")[-1] == ["/image-updates#/updates", None], "this host's task opens its add-on here: " + json.dumps(mock(f, "jumps")))
     no_problems(shell, "without the host switcher")
     shell.context.close()
 
@@ -381,6 +434,13 @@ with sync_playwright() as p:
     tile(f, "old-host/unreachable").click()
     check(mock(f, "jumps") == [["/image-updates#/updates", "public-host"], ["/system", "old-host"]],
           "with the host switcher the tiles of other hosts open their add-on: " + json.dumps(mock(f, "jumps")))
+    f.click("#tab-tasks")
+    wait_js(f, "document.querySelector('.sb-task')")
+    check(f.evaluate("location.hash") == "#/tasks", "the tab is the frame's location: " + f.evaluate("location.hash"))
+    task_button(f, "public-host/cronjobs/item:failed-runs").click()
+    task_button(f, "old-host/unreachable").click()
+    check(mock(f, "jumps")[2:] == [["/cronjobs", "public-host"], ["/system", "old-host"]],
+          "and so do their tasks: " + json.dumps(mock(f, "jumps")))
     no_problems(shell, "with the host switcher")
     shell.context.close()
 
@@ -426,6 +486,25 @@ with sync_playwright() as p:
     check(mock(page, "unexpected") == [], "no unexpected command")
     shot(page, "hostile")
     no_problems(page, "hostile")
+    page.context.close()
+
+    # the same answers in the tab of tasks: still only text
+    page = open_page(browser, "scenario=hostile", tab=None)
+    for key in page.evaluate("() => Array.from(document.querySelectorAll('.sb-task')).map(t => t.dataset.task)")[:12]:
+        page.locator(f'[data-task="{key}"]').hover()
+    check(page.evaluate("() => window.__pwned") is None, "no code from a host runs in the tasks")
+    check(page.evaluate("() => document.querySelectorAll('#tasks img, #tasks script, #tasks b, #tasks i, #tasks a, #tasks iframe, #tasks style').length") == 0
+          and page.evaluate("() => Array.from(document.querySelectorAll('#tasks svg')).every(s => s.classList.contains('az-icon'))"),
+          "no elements from a host's texts in the tasks, only the page's icons")
+    xss = [x for x in tasks(page) if x["key"] == "evil-host/cronjobs/item:xss"]
+    check(len(xss) == 1 and xss[0]["title"] == "<svg onload=\"window.__pwned='title'\"></svg>: <i>7</i>"
+          and xss[0]["where"] == "<img src=x onerror=window.__pwned='host'> · <img src=x onerror=\"window.__pwned='label'\">"
+          and xss[0]["button"] == "In <img src=x onerror=\"window.__pwned='label'\"> öffnen",
+          "title, value, host and add-on names as text: " + repr(xss))
+    task_button(page, "evil-host/cronjobs/item:xss").click()
+    check(mock(page, "jumps") == [["/cronjobs", "evil-host"]], "a task's link that leaves the page is not followed: " + json.dumps(mock(page, "jumps")))
+    check(not any(c in page.inner_text("body") for c in INVISIBLE), "no invisible characters in the tasks")
+    no_problems(page, "hostile tasks")
     page.context.close()
 
     # ---------- broken answers and hosts that cannot be read ----------
@@ -615,7 +694,7 @@ with sync_playwright() as p:
     again.problems = []
     again.on("pageerror", lambda e: again.problems.append("pageerror: " + str(e)))
     again.clock.install(time=NOW)
-    again.goto(BASE + "?scenario=real&lang=en")
+    again.goto(BASE + "?scenario=real&lang=en#/hosts")
     wait_idle(again)
     check(again.is_checked("#only-notable") and again.evaluate("document.querySelector('#board').dataset.onlyNotable") == "true"
           and again.evaluate("() => document.querySelectorAll('.sb-tile').length") == 12, "the switch is kept in the browser")
@@ -640,6 +719,206 @@ with sync_playwright() as p:
     page = open_page(browser, "scenario=real&lang=en", width=390, height=844)
     shot(page, "readme-board-phone", full=False)
     no_problems(page, "real, phone")
+    page.context.close()
+
+    # ---------- Needs attention: the tasks over all hosts (scenario tasks: checks, findings, profile) ----------
+    # Expected values from lib/status.js (buildTasks, coverageSummary) at 2026-10-19 19:00 UTC; the
+    # browser is in Europe/Berlin (UTC+2 until 25 October).
+    TASKS_DE = [
+        ("old-host/unreachable", "danger", "Problem", "Nicht erreichbar"),
+        ("public-host/security/finding:port.6379-tcp", "danger", "Problem", "6379/tcp redis"),
+        ("public-host/security/finding:port.5432-tcp", "danger", "Problem", "5432/tcp postgres"),
+        ("public-host/cronjobs/item:failed-runs", "danger", "Problem", "Fehlgeschlagene Läufe (24 h): 2"),
+        ("locked-host/locked", "warning", "Achtung", "Schlüssel gesperrt"),
+        ("public-host/update-gaps/finding:restart.kernel", "warning", "Achtung", "Restart for kernel 6.8.0-49"),
+        ("build-host/cronjobs/coverage", "warning", "Achtung", "Cron Jobs: kein Zugriff"),
+        ("build-host/image-updates/coverage", "warning", "Achtung", "Image Update Monitor: veraltet"),
+        ("public-host/security/coverage", "warning", "Achtung", "Security Monitor: Container hardening teilweise geprüft"),
+        ("public-host/update-gaps/coverage", "warning", "Achtung", "Update Gaps: Open CVEs (network data) nicht eingerichtet"),
+        ("public-host/image-updates/item:updates", "info", "Hinweis", "Updates verfügbar: 3"),
+    ]
+    page = open_page(browser, "scenario=tasks", tab=None)
+    ts = tab_state(page)
+    check(ts == {"hash": "", "selected": ["tab-tasks"], "shown": ["tasks"], "rows": 0, "tasks": 11, "switch": False},
+          "without a location the board opens on Needs attention; the switch belongs to the other tab: " + repr(ts))
+    tabs = page.evaluate("""() => Array.from(document.querySelectorAll('[role=tab]')).map(t =>
+        [t.querySelector('[data-t]').innerText, (t.querySelector('.sb-count') || {}).innerText || '', t.tabIndex, Math.round(t.getBoundingClientRect().height) >= 44])""")
+    check(tabs == [["Handlungsbedarf", "11", 0, True], ["Hosts und Abdeckung", "", -1, True]] and
+          page.evaluate("document.querySelector('[role=tablist]').getAttribute('aria-label')") == "Ansichten",
+          "two tabs, the number of tasks on the first: " + repr(tabs))
+    got = tasks(page)
+    check([(x["key"], x["group"], x["label"][1], x["title"]) for x in got] == TASKS_DE and all(x["label"][0] == LABEL[x["group"]] for x in got),
+          "the tasks in order: state, a host not read first, exposure, older first, then host and add-on: "
+          + repr([(x["key"], x["label"][1], x["title"]) for x in got]))
+    groups = page.evaluate("""() => Array.from(document.querySelectorAll('.sb-group')).map(g =>
+        [g.dataset.group, g.querySelector('h2 .az-label').innerText.trim(), g.querySelector('h2 .sb-count').innerText])""")
+    check(groups == [["danger", "Problem", "4"], ["warning", "Achtung", "6"], ["info", "Hinweis", "1"]], "grouped by the board's words: " + repr(groups))
+    by = {x["key"]: x for x in got}
+    want = {
+        "public-host/security/finding:port.6379-tcp": {
+            "isnew": None, "where": "public-host · Security Monitor · Reachable from the internet",
+            "chips": ["aus dem Internet erreichbar", "Abhilfe verfügbar"], "detail": None, "sub": None,
+            "facts": [["Seit", "17. Okt., 09:30"], ["Nachweis", "Stand 20:50, vollständig"], ["Behoben, wenn", "eine vollständige Prüfung den Befund nicht mehr findet"]],
+            "button": "In Security Monitor öffnen"},
+        "public-host/security/finding:port.5432-tcp": {
+            "isnew": "neu", "where": "public-host · Security Monitor · Reachable from the internet",
+            "chips": ["aus dem Internet erreichbar", "Abhilfe verfügbar"], "detail": None, "sub": None,
+            "facts": [["Seit", "20:30"], ["Nachweis", "Stand 20:50, vollständig"], ["Behoben, wenn", "eine vollständige Prüfung den Befund nicht mehr findet"]],
+            "button": "In Security Monitor öffnen"},
+        "public-host/cronjobs/item:failed-runs": {
+            "isnew": None, "where": "public-host · Cron Jobs", "chips": ["nur Zusammenfassung"], "detail": "backup-files, update-geoip", "sub": None,
+            "facts": [["Nachweis", "Stand 20:50"], ["Behoben, wenn", "das Add-on den Eintrag wieder als in Ordnung bewertet"]],
+            "button": "In Cron Jobs öffnen"},
+        "old-host/unreachable": {
+            "isnew": None, "where": "old-host", "chips": ["Befunde unbekannt"], "detail": "Der Host ist nicht erreichbar.",
+            "sub": "[Errno -2] Name or service not known", "facts": [["Behoben, wenn", "das Board den Host wieder lesen kann"]], "button": "Host öffnen"},
+        "public-host/update-gaps/finding:restart.kernel": {
+            "isnew": None, "where": "public-host · Update Gaps · Restart", "chips": ["Abhilfe verfügbar"], "detail": None, "sub": None,
+            "facts": [["Seit", "16. Okt., 06:00"], ["Nachweis", "Stand 20:45, vollständig"], ["Behoben, wenn", "eine vollständige Prüfung den Befund nicht mehr findet"]],
+            "button": "In Update Gaps öffnen"},
+        "public-host/security/coverage": {
+            "isnew": None, "where": "public-host · Security Monitor", "chips": [], "detail": "Container hardening: Docker could not be asked", "sub": None,
+            "facts": [["Nachweis", "Stand 20:50"], ["Behoben, wenn", "das Add-on rechtzeitig und mit vollständigen Prüfungen antwortet"]],
+            "button": "In Security Monitor öffnen"},
+        "build-host/image-updates/coverage": {
+            "isnew": None, "where": "build-host (CI) · Image Update Monitor", "chips": [], "detail": "Seine Daten sind seit 18. Okt., 19:12 veraltet.", "sub": None,
+            "facts": [["Nachweis", "Stand 18. Okt., 07:12"], ["Behoben, wenn", "das Add-on rechtzeitig und mit vollständigen Prüfungen antwortet"]],
+            "button": "In Image Update Monitor öffnen"},
+    }
+    for key, w in want.items():
+        have = {k: v for k, v in by.get(key, {}).items() if k in w}
+        check(have == w, "the task " + key + ": " + repr(have))
+    check(by["build-host/cronjobs/coverage"]["detail"].startswith("Ohne Administratorzugriff ist hier nichts lesbar."), "no access says why")
+    check(by["locked-host/locked"]["sub"] == "/home/stefan/.ssh/id_ed25519" and by["locked-host/locked"]["button"] == "Host öffnen", "a locked key")
+
+    # the coverage above both tabs, with the gaps that checks show
+    cov = page.evaluate("""() => [document.querySelector('#coverage .sb-coverage__figure').innerText,
+        Array.from(document.querySelectorAll('#coverage .az-label')).map(l => [l.className, l.innerText.trim()])]""")
+    check(cov == ["4 von 8 Add-ons geprüft", [[LABEL["warning"], "1 kein Zugriff"], [LABEL["warning"], "1 nicht eingerichtet"], [LABEL["warning"], "1 veraltet"],
+                                              [LABEL["warning"], "1 teilweise geprüft"], [LABEL["danger"], "2 Hosts nicht gelesen"]]],
+          "the board's coverage with gaps of single checks: " + repr(cov))
+
+    # a click opens the add-on on the task's host, at the finding's, item's or check's place
+    for key in ("public-host/security/finding:port.6379-tcp", "public-host/update-gaps/finding:restart.kernel", "public-host/security/coverage",
+                "public-host/update-gaps/coverage", "build-host/image-updates/coverage", "build-host/cronjobs/coverage",
+                "public-host/cronjobs/item:failed-runs", "public-host/image-updates/item:updates", "old-host/unreachable"):
+        task_button(page, key).click()
+    check(mock(page, "jumps") == [["/security#/exposure/6379-tcp", "public-host"], ["/update-gaps#/restart", "public-host"],
+                                  ["/security#/containers", "public-host"], ["/update-gaps", "public-host"], ["/image-updates#/updates", "build-host"],
+                                  ["/cronjobs", "build-host"], ["/cronjobs", "public-host"], ["/image-updates#/updates", "public-host"],
+                                  ["/system", "old-host"]],
+          "the jumps of the tasks, each on its host: " + json.dumps(mock(page, "jumps")))
+
+    # the folds: accepted findings and checks that do not apply, closed at first
+    check(folds(page) == [{"fold": "accepted", "title": "Befristet akzeptiert", "count": "1", "open": "false", "head": [], "rows": []},
+                          {"fold": "notapplicable", "title": "Nicht anwendbar", "count": "1", "open": "false", "head": [], "rows": []}],
+          "two folds, closed: " + repr(folds(page)))
+    page.focus('[data-fold="accepted"] .sb-fold__toggle')
+    page.keyboard.press("Enter")
+    page.click('[data-fold="notapplicable"] .sb-fold__toggle')
+    page.focus('[data-fold="accepted"] .sb-fold__toggle')
+    want_folds = [
+        {"fold": "accepted", "title": "Befristet akzeptiert", "count": "1", "open": "true", "head": ["Befund", "Host", "Add-on", "Akzeptiert bis"],
+         "rows": [["postgresql-16 is held", "public-host", "Update Gaps", "30. Okt., 01:00"]]},
+        {"fold": "notapplicable", "title": "Nicht anwendbar", "count": "1", "open": "true", "head": ["Prüfung", "Host", "Add-on", "Grund"],
+         "rows": [["fail2ban", "public-host", "Security Monitor", "fail2ban is not installed"]]},
+    ]
+    check(folds(page) == want_folds, "open: the accepted finding until when, the check with its reason: " + repr(folds(page)))
+    page.evaluate("() => document.querySelector('#refresh').click()")   # a load, while the focus stays on the toggle
+    wait_idle(page)
+    check(folds(page) == want_folds and page.evaluate("document.activeElement.dataset.focus") == "fold:accepted",
+          "open folds stay open when the board loads again, the focus stays on the toggle")
+    shot(page, "tasks")
+    no_problems(page, "tasks")
+
+    # the tab is the location: a click sets #/hosts, Back returns, the keyboard moves between the tabs
+    page.click("#tab-hosts")
+    ts = tab_state(page)
+    check(ts == {"hash": "#/hosts", "selected": ["tab-hosts"], "shown": ["board"], "rows": 5, "tasks": 0, "switch": True}
+          and mock(page, "locations") == ["/hosts"], "a click on the tab sets the location: " + repr(ts) + " " + repr(mock(page, "locations")))
+    lines = dict(page.evaluate("""() => Array.from(document.querySelectorAll('.sb-host')).map(s =>
+        [s.dataset.host, (s.querySelector('.sb-host__coverage') || {}).innerText || null])"""))
+    check(lines == {"localhost": "2 von 2 Add-ons geprüft",
+                    "public-host": "2 von 4 Add-ons geprüft · Security Monitor: Container hardening teilweise geprüft · Update Gaps: Open CVEs (network data) nicht eingerichtet",
+                    "build-host": "0 von 2 Add-ons geprüft · Cron Jobs: kein Zugriff · Image Update Monitor: veraltet", "locked-host": None, "old-host": None},
+          "each host's line names the add-on and the check: " + repr(lines))
+    page.evaluate("() => history.back()")
+    wait_js(page, "location.hash === '' && document.querySelector('.sb-task')")
+    ts = tab_state(page)
+    check(ts["selected"] == ["tab-tasks"] and ts["tasks"] == 11 and ts["rows"] == 0, "Back returns to the tasks: " + repr(ts))
+    page.focus("#tab-tasks")
+    page.keyboard.press("ArrowRight")
+    check(tab_state(page)["selected"] == ["tab-hosts"] and page.evaluate("document.activeElement.id") == "tab-hosts", "the arrow keys move to the next tab")
+    page.keyboard.press("Home")
+    check(tab_state(page)["selected"] == ["tab-tasks"] and page.evaluate("[document.activeElement.id, location.hash]") == ["tab-tasks", "#/tasks"],
+          "Home goes to the first tab, and to #/tasks")
+    page.evaluate("() => { location.hash = '#/hosts'; }")
+    wait_js(page, "document.querySelector('.sb-host')")
+    check(tab_state(page)["selected"] == ["tab-hosts"], "the location set from outside (the shell) selects the tab")
+    page.evaluate("() => { location.hash = '#/nonsense'; }")
+    wait_js(page, "document.querySelector('.sb-task')")
+    check(tab_state(page)["selected"] == ["tab-tasks"], "an unknown location is the first tab")
+    no_problems(page, "tasks, tabs")
+    page.context.close()
+
+    page = open_page(browser, "scenario=tasks")
+    check(tab_state(page)["selected"] == ["tab-hosts"] and mock(page, "locations") == [], "opened at #/hosts, the board shows that tab")
+    page.context.close()
+
+    # in English
+    page = open_page(browser, "scenario=tasks&lang=en", tab=None)
+    text = page.inner_text("body")
+    check(not re.search(r"[äöüÄÖÜß„“]|\b(Nicht|Stand|Achtung|Hinweis|dieser|Verbindung|Seit|Nachweis|Befund)\b", text), "the English tasks have no German")
+    got = tasks(page)
+    check([x["title"] for x in got] == ["Unreachable", "6379/tcp redis", "5432/tcp postgres", "Failed runs (24 h): 2", "Key locked", "Restart for kernel 6.8.0-49",
+                                        "Cron Jobs: no access", "Image Update Monitor: out of date", "Security Monitor: Container hardening partly checked",
+                                        "Update Gaps: Open CVEs (network data) not set up", "Updates available: 3"],
+          "the English titles: " + repr([x["title"] for x in got]))
+    fresh = [x for x in got if x["key"] == "public-host/security/finding:port.5432-tcp"][0]
+    check({k: fresh[k] for k in ("isnew", "chips", "facts", "button")} == {
+        "isnew": "new", "chips": ["reachable from the internet", "fix available"],
+        "facts": [["Since", "20:30"], ["Evidence", "Checked 20:50, complete"], ["Resolved when", "a complete check no longer finds it"]],
+        "button": "Open in Security Monitor"}, "a new finding in English: " + repr(fresh))
+    check([x["chips"] for x in got if x["key"].endswith("item:updates")] == [["summary only"]], "summary only")
+    for word in ("Needs attention", "Hosts and coverage", "4 of 8 add-ons checked", "1 partly checked", "1 not set up", "Accepted", "Not applicable",
+                 "Resolved when", "findings unknown", "Open the host"):
+        check(word in text, "English: " + word)
+    page.click('[data-fold="accepted"] .sb-fold__toggle')
+    check(folds(page)[0]["rows"] == [["postgresql-16 is held", "public-host", "Update Gaps", "Oct 30, 01:00"]] and
+          folds(page)[0]["head"] == ["Finding", "Host", "Add-on", "Accepted until"], "the accepted finding in English: " + repr(folds(page)[0]))
+    shot(page, "readme-tasks")
+    page.click("#tab-hosts")
+    line = page.inner_text('[data-host="public-host"] .sb-host__coverage')
+    check(line == "2 of 4 add-ons checked · Security Monitor: Container hardening partly checked · Update Gaps: Open CVEs (network data) not set up",
+          "the host's line in English: " + line)
+    no_problems(page, "tasks, English")
+    page.context.close()
+
+    # dark, and on a phone
+    page = open_page(browser, "scenario=tasks", tab=None, dark=True)
+    check(page.evaluate("document.documentElement.classList.contains('pf-v6-theme-dark')"), "the tasks in Cockpit's dark style")
+    shot(page, "tasks-dark")
+    no_problems(page, "tasks, dark")
+    page.context.close()
+    page = open_page(browser, "scenario=tasks", tab=None, width=375, height=812)
+
+    def phone(page):
+        return page.evaluate("""() => ({ scroll: document.documentElement.scrollWidth,
+            low: Array.from(document.querySelectorAll('button')).filter(b => b.getBoundingClientRect().height < 44).map(b => b.id || b.dataset.focus),
+            narrow: Array.from(document.querySelectorAll('.sb-task')).filter(t => { const b = t.querySelector('.sb-task__act button');
+                return b && Math.abs(b.getBoundingClientRect().width - t.querySelector('.sb-task__main').getBoundingClientRect().width) > 1; })
+                .map(t => t.dataset.task) })""")
+    layout = phone(page)
+    check(layout == {"scroll": 375, "low": [], "narrow": []},
+          "the tasks on a phone: no sideways scrolling, controls at least 44 px high, buttons across the card: " + repr(layout))
+    page.click('[data-fold="accepted"] .sb-fold__toggle')
+    page.click('[data-fold="notapplicable"] .sb-fold__toggle')
+    layout = phone(page)
+    check(layout == {"scroll": 375, "low": [], "narrow": []}, "the same with the folds open: " + repr(layout))
+    shot(page, "tasks-phone")
+    page.click("#tab-hosts")
+    check(page.evaluate("document.documentElement.scrollWidth") <= 375, "and on the hosts tab with the lines of the checks")
+    no_problems(page, "tasks, phone")
     page.context.close()
 
     # ---------- package names like "constructor", and status output at and past 64 KiB ----------

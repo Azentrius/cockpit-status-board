@@ -16,10 +16,14 @@
  * instead of watching files: cockpit.file().watch() ignores the host option and would watch the
  * file on this host.
  *
- * A tile folds out every entry of its answer, each opening its own place in the add-on; a switch
- * shows only what needs attention (kept in the browser), and a tile says when the same add-on runs
- * in a newer version on another host. Above the hosts and below each host's name the page says how
- * many add-ons answered in time with something rated (coverage), whatever the switch.
+ * Two tabs, part of the page's location (#/tasks, #/hosts): "Needs attention" lists what to do on
+ * all hosts in one order (open findings, rated items, gaps in the coverage, hosts that cannot be
+ * read; lib/status.js, buildTasks), each with its reasons, its evidence and a button into the
+ * add-on; "Hosts and coverage" is the board of rows and tiles. A tile folds out every entry of its
+ * answer, each opening its own place in the add-on; a switch on that tab shows only what needs
+ * attention (kept in the browser), and a tile says when the same add-on runs in a newer version
+ * on another host. Above both tabs, and below each host's name, the page says how many add-ons
+ * answered in time with something rated (coverage), whatever the switch.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -107,6 +111,10 @@
     function label(state, word, strong) {
         const cls = SB.LABEL_CLASS[state] + (strong ? " az-label--strong" : "");
         return h("span", { class: cls }, icon(STATE_ICON[state]), word);
+    }
+    /* A reason of a task: neutral and outlined, so that it never reads as a state. */
+    function chip(word, strong) {
+        return h("span", { class: "sb-chip" + (strong ? " sb-chip--strong" : "") }, word);
     }
 
     /* ---------- time ---------- */
@@ -277,8 +285,37 @@
         try { window.localStorage.setItem(NOTABLE_KEY, on ? "1" : "0"); } catch (_) { /* no storage */ }
     }
 
-    /* open: the tiles whose entries are folded out, by data-key; they stay open across loads. */
-    const state = { loading: false, loadedAt: 0, hosts: [], alerts: [], open: new Set(), onlyNotable: readOnlyNotable() };
+    /* open: the tiles whose entries are folded out, by data-key; folds: the folded sections of the
+       tasks that are open ("accepted", "notapplicable"); both stay open across loads. tab: the tab
+       shown, from the location. */
+    const state = { loading: false, loadedAt: 0, hosts: [], alerts: [], open: new Set(), folds: new Set(), onlyNotable: readOnlyNotable(), tab: "tasks" };
+
+    /* The tab is part of the page's location, as Cockpit's own pages keep theirs: #/tasks (also
+       an empty or unknown location) or #/hosts. The shell keeps it in its address, so Back, a
+       reload and a jump to /status-board#/hosts open that tab. */
+    const TABS = ["tasks", "hosts"];
+    function tabOfLocation() {
+        const loc = cockpit.location;
+        const first = loc && Array.isArray(loc.path) ? loc.path[0] : null;
+        return TABS.includes(first) ? first : "tasks";
+    }
+    function selectTab(tab) {
+        if (tab !== state.tab) {
+            state.tab = tab;
+            render();
+        }
+        if (tabOfLocation() !== tab && cockpit.location && typeof cockpit.location.go === "function") cockpit.location.go([tab]);
+    }
+    /* The tabs with the keyboard, as tabs work everywhere: arrows, Home and End. */
+    const TAB_KEYS = { ArrowLeft: -1, ArrowRight: 1, Home: "first", End: "last" };
+    function onTabKey(ev) {
+        if (!own(TAB_KEYS, ev.key)) return;
+        ev.preventDefault();
+        const step = TAB_KEYS[ev.key];
+        const i = step === "first" ? 0 : step === "last" ? TABS.length - 1 : (TABS.indexOf(state.tab) + step + TABS.length) % TABS.length;
+        selectTab(TABS[i]);
+        $("tab-" + TABS[i]).focus();
+    }
 
     const hostLabel = host => host.label || (host.result && host.result.hostname) || host.key;
 
@@ -344,7 +381,10 @@
         }));
     }
 
-    /* The coverage of the board, above the hosts and outside the switch: how many add-ons answered
+    /* The gaps of the coverage in the order the page names them: what says least first. */
+    const GAP_ORDER = ["unreadable", "noaccess", "unconfigured", "failed", "unsupported", "unchecked", "stale", "partial"];
+
+    /* The coverage of the board, above both tabs and outside the switch: how many add-ons answered
        in time with something rated, what keeps the others from it, and how many hosts could not be
        read. Hidden while no host has an add-on with a status (the empty state says so). */
     function renderCoverage(rows, nothing) {
@@ -355,7 +395,7 @@
             box.replaceChildren();
             return;
         }
-        const gaps = ["unreadable", "noaccess", "unchecked", "stale"].filter(k => c.gaps[k])
+        const gaps = GAP_ORDER.filter(k => c.gaps[k])
             .map(k => label("warning", T.coverageGap(c.gaps[k], T.coverageWords[k])));
         fill(box,
             h("h2", { class: "sb-coverage__title", id: "coverage-title" }, T.coverage),
@@ -365,9 +405,11 @@
             !state.loading && !gaps.length && !c.unread ? label("ok", T.coverageComplete) : null);
     }
 
+    /* One gap: "Cron Jobs: no access", or with the check that shows it, "Security Monitor:
+       Container hardening partly checked". */
+    const gapText = g => g.label + ": " + (g.check ? T.checkGap[g.coverage](g.check) : T.coverageWords[g.coverage]);
     /* A host's coverage below its name: "2 of 3 add-ons checked · Cron Jobs: no access". */
-    const coverageLine = c => [T.hostCoverage(c.checked, c.total)]
-        .concat(c.gaps.map(g => g.label + ": " + T.coverageWords[g.coverage])).join(" · ");
+    const coverageLine = c => [T.hostCoverage(c.checked, c.total)].concat(c.gaps.map(gapText)).join(" · ");
 
     function errorText(e) {
         switch (e.kind) {
@@ -412,6 +454,11 @@
         return parts;
     }
 
+    /* Why a host cannot be reached, by Cockpit's problem code. */
+    const reachText = tile => (!OTHER_HOSTS && own(T.reachNoSwitcher, tile.problem) ? T.reachNoSwitcher[tile.problem]
+        : own(T.reach, tile.problem) ? T.reach[tile.problem] : T.reach.other);
+    const lockedText = () => (OTHER_HOSTS ? T.lockedText : T.lockedTextNoSwitcher);
+
     /* go: a click on the tile opens something */
     function tileParts(tile, go) {
         const toHost = go ? h("span", { class: "sb-tile__go" }, T.toHost) : null;
@@ -422,20 +469,16 @@
         case "noaccess": return [text(T.noaccessText)];
         case "rejected": return [text(rich(T.rejectedText))];
         case "error": return [text(rich(errorText(tile.error))), tile.error.message ? meta(tile.error.message) : null];
-        case "unreachable": {
-            const why = !OTHER_HOSTS && own(T.reachNoSwitcher, tile.problem) ? T.reachNoSwitcher[tile.problem]
-                : own(T.reach, tile.problem) ? T.reach[tile.problem] : T.reach.other;
-            return [text(rich(why)), tile.message ? meta(tile.message) : null, toHost];
-        }
+        case "unreachable": return [text(rich(reachText(tile))), tile.message ? meta(tile.message) : null, toHost];
         case "locked":
-            return [text(rich(OTHER_HOSTS ? T.lockedText : T.lockedTextNoSwitcher)),
-                    tile.identity ? meta(h("code", null, tile.identity)) : null, toHost];
+            return [text(rich(lockedText())), tile.identity ? meta(h("code", null, tile.identity)) : null, toHost];
         case "discovery": return [text(T.discoveryText), tile.message ? meta(tile.message) : null];
         default: return [];
         }
     }
 
-    /* link: the place of one entry; else the key item's */
+    /* link: the place of one entry, finding or check ("" for the add-on's start); without one
+       (undefined, null) the key item's */
     function jumpTo(host, tile, link) {
         if (!host.own && !OTHER_HOSTS) return;
         if (tile.jump === "host") {
@@ -443,7 +486,7 @@
             return;
         }
         if (!SB.PACKAGE_RE.test(tile.pkg)) return;
-        const place = link !== undefined ? link : tile.kind === "status" && tile.eval.key && tile.eval.key.link ? tile.eval.key.link : "";
+        const place = typeof link === "string" ? link : tile.kind === "status" && tile.eval.key && tile.eval.key.link ? tile.eval.key.link : "";
         const path = "/" + tile.pkg + (SB.LINK_RE.test(place) ? place : "");
         if (host.own) cockpit.jump(path);
         else cockpit.jump(path, host.key);
@@ -541,31 +584,173 @@
                 : quiet ? null : h("p", { class: "sb-note" }, note));
     }
 
+    /* ---------- needs attention ---------- */
+
+    function emptyCard(title, body, iconName) {
+        return h("section", { class: "az-card" }, h("div", { class: "az-empty" },
+            h("span", { class: "az-empty__icon" }, icon(iconName)),
+            h("h2", { class: "az-empty__title" }, title),
+            h("p", { class: "az-empty__body" }, body)));
+    }
+
+    /* What a task says beyond its title: [detail, line below it], both may be null. Texts of the
+       page go through rich(), texts of hosts stay text. */
+    function taskDetail(task) {
+        const tile = task.tile;
+        switch (task.kind) {
+        case "item": return [task.item.detail, null];
+        case "host":
+            if (tile.kind === "unreachable") return [rich(reachText(tile)), tile.message];
+            if (tile.kind === "locked") return [rich(lockedText()), tile.identity ? h("code", null, tile.identity) : null];
+            return [T.discoveryText, tile.message];
+        case "coverage":
+            if (task.check) {
+                return [task.checks.map(c => c.title + (c.reason ? ": " + c.reason : "") +
+                    (c.staleAt !== null ? " (" + T.staleSince(fmtWhen(c.staleAt)) + ")" : "")).join("; "), null];
+            }
+            switch (task.coverage) {
+            case "noaccess": return [T.noaccessText, null];
+            case "unchecked": return [T.uncheckedText, null];
+            case "stale": return [T.staleText(fmtWhen(tile.eval.staleSince)), null];
+            default: return tile.kind === "rejected" ? [rich(T.rejectedText), null] : [rich(errorText(tile.error)), tile.error.message];
+            }
+        default: return [null, null];
+        }
+    }
+
+    /* One task: its label, title and "new"; host and add-on (and the item a finding belongs to);
+       the reasons for its place in the list; what the add-on says; since when, the evidence and
+       what resolves it; and a button that opens the add-on on its host at the finding's, item's or
+       check's place, through jumpTo() like a tile (nothing for another host without the host
+       switcher). */
+    function renderTask(task, id) {
+        const tile = task.tile;
+        const host = task.host;
+        const go = !!tile.jump && (host.own || OTHER_HOSTS);
+        const titleId = "task-" + id;
+        const title = task.kind === "host" ? T.words[tile.word]
+            : task.kind === "coverage" ? gapText({ label: tile.label, coverage: task.coverage, check: task.check ? task.check.title : null })
+            : task.kind === "item" && task.item.value ? task.item.title + ": " + task.item.value : task.title;
+        const where = [h("strong", null, host.label), tile.pkg ? " · " + tile.label : null, task.kind === "finding" ? " · " + task.item.title : null];
+        const why = [
+            task.exposure === "internet" || task.exposure === "restricted" ? chip(T.chips[task.exposure], true) : null,
+            task.exploited === "known" ? chip(T.chips.exploited, true) : null,
+            task.fix === "available" ? chip(T.chips.fix) : null,
+            task.summaryOnly ? chip(T.chips.summary) : null,
+            task.kind === "host" ? chip(T.chips.unknown, true) : null,
+        ].filter(Boolean);
+        const [detail, sub] = taskDetail(task);
+        const ev = task.evidence;
+        const facts = [
+            task.since !== null ? [T.factSince, fmtWhen(task.since), fmtFull(task.since)] : null,
+            ev ? [T.factEvidence, ev.complete === null ? T.checked(fmtWhen(ev.at)) : T.evidence[ev.complete ? "complete" : "partial"](fmtWhen(ev.at)), fmtFull(ev.at)] : null,
+            [T.factResolved, T.resolved[task.kind], null],
+        ].filter(Boolean);
+        return h("article", { class: "az-card sb-task", "data-task": task.key, "aria-labelledby": titleId },
+            h("div", { class: "sb-task__main" },
+                h("div", { class: "sb-task__head" }, label(task.state, T.words[task.state]),
+                    h("h3", { class: "sb-task__title", id: titleId }, title),
+                    task.isNew ? h("span", { class: "sb-chip sb-chip--new" }, T.newMark) : null),
+                h("p", { class: "sb-task__where" }, where),
+                why.length ? h("div", { class: "sb-task__why" }, why) : null,
+                detail ? h("p", { class: "sb-task__detail" }, detail) : null,
+                sub ? h("p", { class: "sb-task__sub" }, sub) : null,
+                h("dl", { class: "sb-task__facts" }, facts.map(f => [h("dt", null, f[0]), h("dd", { title: f[2] }, f[1])]))),
+            go ? h("div", { class: "sb-task__act" }, h("button", {
+                class: "az-btn az-btn--secondary az-btn--sm", type: "button", "data-focus": "task:" + task.key,
+                onclick: () => jumpTo(task.host, task.tile, task.link),
+            }, task.kind === "host" ? T.toHost : T.openIn(tile.label))) : null);
+    }
+
+    /* A folded section below the tasks (accepted findings, checks that do not apply): a toggle,
+       and while it is open a table (az-table--stack). Left out while it has nothing. */
+    function renderFold(id, title, cols, cells) {
+        if (!cells.length) return null;
+        const open = state.folds.has(id);
+        const bodyId = "fold-" + id;
+        return h("section", { class: "az-card sb-fold", "data-fold": id },
+            h("h2", { class: "sb-fold__title" }, h("button", {
+                class: "sb-fold__toggle", type: "button", "data-focus": "fold:" + id,
+                "aria-expanded": open ? "true" : "false", "aria-controls": open ? bodyId : null,
+                onclick: () => {
+                    if (state.folds.has(id)) state.folds.delete(id);
+                    else state.folds.add(id);
+                    render();
+                },
+            }, icon(open ? "angle-down" : "angle-right"), h("span", null, title), h("span", { class: "sb-count" }, String(cells.length)))),
+            open ? h("div", { class: "az-card__body--flush", id: bodyId }, h("div", { class: "az-table-wrap" },
+                h("table", { class: "az-table az-table--stack sb-fold__table" },
+                    h("thead", null, h("tr", null, cols.map(c => h("th", { scope: "col" }, c)))),
+                    h("tbody", null, cells.map(r => h("tr", null, r.map((cell, i) => h("td", { "data-label": cols[i] }, cell)))))))) : null);
+    }
+
+    /* The tab "Needs attention": the tasks grouped by state (Problem, Warning, Notice), in the
+       order of buildTasks(), then the folds. Says when nothing needs attention, and that hosts are
+       still loading. */
+    function renderTasks(model, rows, nothing, nextId) {
+        /* before the host list is read there are no rows yet */
+        const loading = !rows.length || rows.some(r => r.tiles.some(t => t.kind === "loading"));
+        const groups = ["danger", "warning", "info"].map(s => ({ s, tasks: model.tasks.filter(t => t.state === s) })).filter(g => g.tasks.length);
+        fill($("tasks"),
+            nothing ? emptyCard(T.emptyTitle, T.emptyBody, "info-circle") : null,
+            loading ? h("p", { class: "sb-note" }, T.loading) : null,
+            !model.tasks.length && !loading && !nothing ? emptyCard(T.tasksEmptyTitle, T.tasksEmptyBody, "check-circle") : null,
+            groups.map(g => h("section", { class: "sb-group", "data-group": g.s, "aria-labelledby": "group-" + g.s },
+                h("h2", { class: "sb-group__title", id: "group-" + g.s }, label(g.s, T.words[g.s]), h("span", { class: "sb-count" }, String(g.tasks.length))),
+                g.tasks.map(t => renderTask(t, nextId())))),
+            renderFold("accepted", T.accepted, [T.colFinding, T.colHost, T.colAddon, T.colUntil],
+                model.accepted.map(a => [a.finding.title, a.host.label, a.tile.label, fmtWhen(a.until)])),
+            renderFold("notapplicable", T.notApplicable, [T.colCheck, T.colHost, T.colAddon, T.colReason],
+                model.notApplicable.map(n => [n.check.title, n.host.label, n.tile.label, n.check.reason])));
+    }
+
+    /* The tabs as the state says: which one is selected (and in the order of Tab), which panel
+       shows, the number of tasks, and the switch only on the hosts tab. */
+    function renderTabs(count) {
+        TABS.forEach(t => {
+            const on = t === state.tab;
+            const tab = $("tab-" + t);
+            tab.setAttribute("aria-selected", on ? "true" : "false");
+            tab.tabIndex = on ? 0 : -1;
+            $(tab.getAttribute("aria-controls")).hidden = !on;
+        });
+        $("count-tasks").textContent = count ? String(count) : "";
+        $("notable-wrap").hidden = state.tab !== "hosts";
+    }
+
     function render() {
         const hosts = SB.sortHosts(state.hosts.map(x => Object.assign({}, x, { label: hostLabel(x) })));
-        const rows = SB.buildBoard(hosts, Date.now());
+        const now = Date.now();
+        const rows = SB.buildBoard(hosts, now);
+        const model = SB.buildTasks(rows, now);
         const active = document.activeElement;
-        /* a tile (data-key) or a control inside its card (data-focus): it gets the focus back */
+        /* a tile (data-key) or a control inside a card (data-focus): it gets the focus back */
         const focusKey = active && active.dataset ? active.dataset.key || active.dataset.focus || null : null;
         let seq = 0;
         const nextId = () => ++seq;
 
         renderAlerts();
         const board = $("board");
+        const tasks = $("tasks");
         /* No add-on with a status anywhere (yet): say so once, and still show the hosts, so that
            it shows which of them answer. */
         const nothing = rows.length > 0 && rows.every(r => r.tiles.every(t => !t.pkg && t.kind !== "loading"));
         renderCoverage(rows, nothing);
-        fill(board,
-            nothing ? h("section", { class: "az-card" }, h("div", { class: "az-empty" },
-                h("span", { class: "az-empty__icon" }, icon("info-circle")),
-                h("h2", { class: "az-empty__title" }, T.emptyTitle),
-                h("p", { class: "az-empty__body" }, T.emptyBody))) : null,
-            rows.map((r, i) => renderRow(r, i, nothing, nextId)));
-        board.setAttribute("aria-busy", state.loading ? "true" : "false");
+        renderTabs(model.tasks.length);
+        /* Only the shown tab has content: a hidden button would still count. */
+        if (state.tab === "tasks") {
+            renderTasks(model, rows, nothing, nextId);
+            board.replaceChildren();
+        } else {
+            tasks.replaceChildren();
+            fill(board,
+                nothing ? emptyCard(T.emptyTitle, T.emptyBody, "info-circle") : null,
+                rows.map((r, i) => renderRow(r, i, nothing, nextId)));
+        }
+        [board, tasks].forEach(el => el.setAttribute("aria-busy", state.loading ? "true" : "false"));
         board.dataset.onlyNotable = state.onlyNotable ? "true" : "false";
         if (focusKey) {
-            const el = Array.from(board.querySelectorAll("[data-key], [data-focus]"))
+            const el = Array.from($("page").querySelectorAll("[data-key], [data-focus]"))
                 .find(x => x.dataset.key === focusKey || x.dataset.focus === focusKey);
             if (el && el.tagName === "BUTTON") el.focus();
         }
@@ -586,6 +771,21 @@
         /* for the tests: what the page found in the shell's document */
         $("board").dataset.multihost = MULTIHOST;
         $("refresh").addEventListener("click", () => load());
+        state.tab = tabOfLocation();
+        renderTabs(0);
+        TABS.forEach(t => {
+            $("tab-" + t).addEventListener("click", () => selectTab(t));
+            $("tab-" + t).addEventListener("keydown", onTabKey);
+        });
+        /* Back, Forward, or the shell setting the location (a jump to /status-board#/hosts) */
+        if (typeof cockpit.addEventListener === "function") {
+            cockpit.addEventListener("locationchanged", () => {
+                const tab = tabOfLocation();
+                if (tab === state.tab) return;
+                state.tab = tab;
+                render();
+            });
+        }
         const notable = $("only-notable");
         notable.checked = state.onlyNotable;
         notable.addEventListener("change", () => {
