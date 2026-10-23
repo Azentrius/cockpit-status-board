@@ -11,7 +11,9 @@ real Cockpit what docs/INTERNALS.md derives from its code:
     "Unreachable";
   - a click on a tile opens the add-on on its host at the key item's link; for a host the shell
     is not connected to yet, after the shell asks;
-  - the board finds AllowMultiHost in the shell's document (the meta tag allow-multihost).
+  - the board finds AllowMultiHost in the shell's document (the meta tag allow-multihost);
+  - the board opens on Needs attention, and its tab is part of the location (cockpit.location),
+    which the shell keeps in its address and sets on a jump to /status-board#/hosts.
 
 The other hosts are this machine under other names. It changes the machine, so the job e2e in
 .github/workflows/test.yml sets it up on the runner's throwaway VM:
@@ -180,12 +182,16 @@ def open_here(page, b):
     check(f is not None and "#/probe" in f.url and probe == "E2E Probe", "the add-on's page: " + (f.url if f else "no frame"))
     shot(page, "e2e-addon-here")
     if f is not None:
-        f.evaluate("() => cockpit.jump('/status-board')")
+        f.evaluate("() => cockpit.jump('/status-board#/hosts')")
     else:
-        page.goto(ROOT + "/status-board")
+        page.goto(ROOT + "/status-board#/hosts")
     check(wait_js(page, "location.pathname === '/status-board'", 15), "back on the board: " + page.url)
     b = shell_frame(page, BOARD)
-    return b if b is not None and wait_idle(b) else None
+    if b is None or not wait_idle(b):
+        return None
+    check(wait_js(b, "location.hash === '#/hosts' && document.querySelector('[data-key=\"e2e-peer/e2e\"]')", 15),
+          "a jump to /status-board#/hosts opens the tab Hosts and coverage: " + b.url)
+    return b
 
 
 def open_on_peer(page, b):
@@ -247,6 +253,17 @@ with sync_playwright() as p:
         sys.exit("the shell did not load Status Board (frame cockpit1:localhost/status-board)")
     check(wait_idle(b), "the board has loaded every host within 60 seconds")
     print(f"board loaded in {time.time() - started:.1f} s")
+
+    # without a location the board opens on Needs attention: what to do on every host, in one order
+    check(b.evaluate("document.querySelector('#tab-tasks').getAttribute('aria-selected')") == "true", "the board opens on Needs attention")
+    keys = b.evaluate("() => Array.from(document.querySelectorAll('.sb-task')).map(t => t.dataset.task)")
+    check(keys == ["e2e-closed/unreachable", "e2e-locked/locked", "localhost/e2e/item:probe", "e2e-peer/e2e/item:probe"],
+          "the tasks of the hosts: the closed port, the locked key, then the add-on's notice here and on e2e-peer: " + repr(keys))
+    shot(page, "e2e-tasks")
+    # the tab is part of the location, which the shell keeps in its address
+    b.click("#tab-hosts")
+    check(wait_js(b, "location.hash === '#/hosts' && document.querySelector('.sb-host')", 15), "the tab Hosts and coverage, at #/hosts: " + b.url)
+    check(wait_js(page, "location.hash === '#/hosts'", 15), "the shell keeps the tab in its address: " + page.url)
 
     # the host switcher's list, from the bridge
     r = rows(b)

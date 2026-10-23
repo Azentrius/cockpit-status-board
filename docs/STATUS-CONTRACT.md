@@ -145,8 +145,10 @@ host and how they went (`checks`), the single findings behind an item (`findings
 host is expected to check (`profile`, from Host Settings only). Old boards and old add-ons ignore
 them (`schema` stays `1`). An add-on names the parts it sends in `features`; a part it does not
 name is not read. What breaks the rules below is left out and counted, it never makes the answer
-unreadable. The board checks them (`validateStatus()`, `test/fixtures/status/ext-*.json`) and lets
-open findings count for an item's state (below); its tiles do not show them yet.
+unreadable. The board checks them (`validateStatus()`, `test/fixtures/status/ext-*.json`), lets
+open findings count for an item's state (below), takes an add-on's coverage from its checks and
+lists open findings as tasks ([INTERNALS.md](INTERNALS.md), "Needs attention"); it does not read
+the profile yet.
 
 ```json
 {
@@ -221,9 +223,10 @@ paths.
 - An acceptance ends on its day; one more than 90 days ahead of the check does not count at all.
 
 **Checks and coverage.** `checks` lists what the add-on can check on this host, also what it does
-not check and why (`unconfigured`, `unsupported`, `notapplicable`). A check that is not
-`checked`, or whose `checked_at` lies more than `stale_after` back, is a gap in what the board knows
-about the host, not a finding. A single item in state `none` cannot say that in version 1, because
+not check and why (`unconfigured`, `unsupported`, `notapplicable`). A check that applies (every
+state but `notapplicable`) and is not `checked`, or whose `checked_at` lies more than `stale_after`
+back, is a gap in what the board knows about the host, not a finding; the worst of them is the
+add-on's coverage on that host. A single item in state `none` cannot say that in version 1, because
 add-ons use `none` for "nothing to rate" as well.
 
 **A host's profile.** Host Settings sends what its host is expected to check: roles, the add-ons
