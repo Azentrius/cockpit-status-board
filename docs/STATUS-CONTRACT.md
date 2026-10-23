@@ -138,6 +138,97 @@ single item in `none` next to rated ones is fine: it may mean "nothing to rate".
 warning), one with a `value` before one without, else the first. Its `link` is where a click on the
 tile goes.
 
+## Optional: checks, findings and a host's profile
+
+Three optional parts of version 1 say more than the items do: which checks an add-on runs on this
+host and how they went (`checks`), the single findings behind an item (`findings`), and what a
+host is expected to check (`profile`, from Host Settings only). Old boards and old add-ons ignore
+them (`schema` stays `1`). An add-on names the parts it sends in `features`; a part it does not
+name is not read. What breaks the rules below is left out and counted, it never makes the answer
+unreadable. The board checks them (`validateStatus()`, `test/fixtures/status/ext-*.json`) and lets
+open findings count for an item's state (below); its tiles do not show them yet.
+
+```json
+{
+  "schema": 1,
+  "addon": "security",
+  "state": "danger",
+  "features": ["checks", "findings"],
+  "checks": [
+    {"id": "exposure", "state": "checked", "title": "Reachable from the internet", "item": "exposure",
+     "checked_at": "2026-10-19T18:50:00Z", "stale_after": 3600},
+    {"id": "fail2ban", "state": "notapplicable", "title": "fail2ban", "reason": "fail2ban is not installed"}
+  ],
+  "items": [
+    {"id": "exposure", "state": "danger", "title": "Reachable from the internet", "value": "2",
+     "checked_at": "2026-10-19T18:50:00Z", "stale_after": 3600,
+     "findings": {"complete": true, "total": 2, "list": [
+       {"fid": "port.5432-tcp", "state": "danger", "title": "5432/tcp postgres", "since": "2026-10-19T18:30:00Z",
+        "exposure": "internet", "fix": "available", "link": "#/exposure/5432-tcp"},
+       {"fid": "port.6379-tcp", "state": "danger", "title": "6379/tcp redis", "exposure": "internet"}
+     ]}}
+  ]
+}
+```
+
+| Field | Rule | Otherwise |
+|---|---|---|
+| `features` | a list; `checks`, `findings` and `profile` are read, anything else is ignored | no part is read |
+| `checks` | a list, at most 50 count | left out and counted |
+| `checks[].id` | `^[a-z0-9-]{1,40}$`, once per answer, the same on every host | the check is left out |
+| `checks[].state` | `checked` (fully, in time), `partial` (some of it could not be read), `failed`, `unconfigured` (installed, does not check: timer off, never ran), `noaccess`, `unsupported` (cannot check on this system), `notapplicable` (nothing to check here, e.g. no Docker) | the check is left out |
+| `checks[].title` | text, cut to 80 | the check is left out |
+| `checks[].item` | the id of the item of this answer that shows the result | left out |
+| `checks[].checked_at`, `stale_after`, `link` | as for items | left out |
+| `checks[].reason` | text, cut to 200: why it is not `checked` | left out |
+| `items[].findings` | an object `{complete, total, list}` | left out and counted |
+| `findings.complete` | `true` only when `list` holds every finding of the item | (required) |
+| `findings.total` | how many there are, listed or not | the length of `list` |
+| `findings.list` | at most 100 findings per answer, over all items; more are left out | left out and counted |
+| `list[].fid` | `^[a-z0-9][a-z0-9._:-]{0,63}$`, once per answer | the finding is left out |
+| `list[].state` | one of the five states | the finding is left out |
+| `list[].title` | text, cut to 80 | the finding is left out |
+| `list[].since` | ISO 8601 with a zone: when the add-on first saw it | left out |
+| `list[].exposure` | `internet`, `restricted` (from some addresses), `internal`, `local` | left out |
+| `list[].fix` | `available`, `none`, `unknown` | left out |
+| `list[].exploited` | `known` | left out |
+| `list[].accepted_until` | ISO 8601 with a zone, at most 90 days after the item's `checked_at` (else the answer's) | left out: not accepted |
+| `list[].link` | as for items | the item's link |
+| `profile` | an object, read only from `addon: "host-settings"` | left out and counted |
+| `profile.roles` | at most 10 of `^[a-z0-9-]{1,40}$` | each one left out |
+| `profile.expect` | at most 100 add-ons or checks the host should have: `security`, `security/exposure` | each one left out |
+| `profile.skip` | at most 50 of `{check, reason, until}`: a check left out on purpose, `reason` text cut to 200, `until` optional | each one left out |
+| `profile.set_at` | ISO 8601 with a zone | left out |
+
+**Findings.** A finding is one thing found: a port reachable from the internet, a held package, a
+container with the Docker socket. Its `fid` comes from the add-on's rule and the resource, never
+from a text, a count, a time or the order (`port.5432-tcp`, `held.postgresql-16`), so the same
+finding has the same `fid` in every language and on every run; what changes about it (which
+families reach a port, a version) belongs in its title or the item, not in the `fid`. Where the
+resource itself is not for everyone's eyes (an account, a path, an address), the `fid` takes a key
+instead: `h-` and 16 hex digits of an HMAC-SHA256 with a random key the add-on keeps for itself on
+the host. Like every other text of the answer, titles name no IP addresses, user names, URLs or
+paths.
+
+- **A list is complete** only when the add-on says so and a check of state `checked` names the
+  item in `item`; a list with findings left out, or one without such a check, counts as not
+  complete. Only a complete list says that a finding missing from it is gone; anything else
+  (a check that failed, ran in part, is out of date, an answer cut short) says nothing about it.
+- **An item is never better than its open findings:** the board takes the most severe state of the
+  item and of its findings that are not accepted, or whose `accepted_until` has passed. An add-on
+  may keep accepted findings out of the item's state (Update Gaps does), but it keeps them in the
+  list: accepted is not fixed.
+- An acceptance ends on its day; one more than 90 days ahead of the check does not count at all.
+
+**Checks and coverage.** `checks` lists what the add-on can check on this host, also what it does
+not check and why (`unconfigured`, `unsupported`, `notapplicable`). A check that is not
+`checked`, or whose `checked_at` lies more than `stale_after` back, is a gap in what the board knows
+about the host, not a finding. A single item in state `none` cannot say that in version 1, because
+add-ons use `none` for "nothing to rate" as well.
+
+**A host's profile.** Host Settings sends what its host is expected to check: roles, the add-ons
+and checks they expect, and checks left out on purpose. It names only its own host.
+
 ## Optional: a state in Cockpit's menu
 
 The same `status.json` can give the add-on's own menu entry a symbol, on the host whose menu is
@@ -165,6 +256,7 @@ hour, so its symbol is at least a warning an hour after the last check).
 
 - A change that old boards or old add-ons would misread raises `schema`. The board accepts only the
   versions it knows and names any other one ("follows version N").
-- New optional fields need no new version: unknown fields are ignored on both sides.
+- New optional fields need no new version: unknown fields are ignored on both sides. The optional
+  parts above came that way.
 - A change goes into `src/lib/status.js`, the fixtures, the tests and this file together; the
   add-ons follow in their own repositories.

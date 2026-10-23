@@ -79,6 +79,8 @@
     /* ---------- the status contract, version 1 ---------- */
 
     const fail = (reason, detail) => ({ ok: false, reason, detail: detail === undefined ? null : detail });
+    const linkOf = v => (typeof v === "string" && LINK_RE.test(v) ? v : null);
+    const staleAfterOf = v => (Number.isInteger(v) && v > 0 && v <= MAX_STALE_AFTER ? v : null);
 
     function validateItem(raw) {
         if (!isObject(raw)) return null;
@@ -93,11 +95,165 @@
             title,
             value: cleanText(value, LIMITS.value),
             detail: cleanText(raw.detail, LIMITS.detail),
-            link: typeof raw.link === "string" && LINK_RE.test(raw.link) ? raw.link : null,
+            link: linkOf(raw.link),
             checkedAt: parseTime(raw.checked_at),
-            staleAfter: Number.isInteger(raw.stale_after) && raw.stale_after > 0 && raw.stale_after <= MAX_STALE_AFTER
-                ? raw.stale_after : null,
+            staleAfter: staleAfterOf(raw.stale_after),
+            findings: null,
         };
+    }
+
+    /* ---------- the optional parts of version 1: checks, findings, a host's profile ---------- */
+
+    /* What an add-on declares in `features`; only what it declares is read. */
+    const FEATURES = ["checks", "findings", "profile"];
+    /* How a check went: what the board knows from it (its coverage). */
+    const CHECK_STATES = ["checked", "partial", "failed", "unconfigured", "noaccess", "unsupported", "notapplicable"];
+    /* A finding's id: the add-on's rule and the resource it is about ("port.5432-tcp"), never a
+       text, a count or a time, so that it stays the same in every language and order. */
+    const FID_RE = /^[a-z0-9][a-z0-9._:-]{0,63}$/;
+    /* An add-on ("security") or one of its checks ("security/exposure") in a profile. */
+    const EXPECT_RE = /^[a-z0-9][a-z0-9-]{0,40}(?:\/[a-z0-9-]{1,40})?$/;
+    const ROLE_RE = /^[a-z0-9-]{1,40}$/;
+    const EXPOSURES = ["internet", "restricted", "internal", "local"];
+    const FIXES = ["available", "none", "unknown"];
+    const MAX_CHECKS = 50;
+    /* findings per answer, over all its items; more go to a verb of their own later */
+    const MAX_FINDINGS = 100;
+    const MAX_ROLES = 10;
+    const MAX_EXPECT = 100;
+    const MAX_SKIP = 50;
+    /* An acceptance counts for at most 90 days after the check, as Update Gaps takes them. */
+    const MAX_ACCEPT_MS = 90 * 86400 * 1000;
+
+    /* One check of `checks`, or null. item: the id of the item that shows its result, kept only
+       when the answer has that item. */
+    function validateCheck(raw, itemIds) {
+        if (!isObject(raw)) return null;
+        if (typeof raw.id !== "string" || !ITEM_ID_RE.test(raw.id)) return null;
+        if (typeof raw.state !== "string" || !CHECK_STATES.includes(raw.state)) return null;
+        const title = cleanText(raw.title, LIMITS.title);
+        if (!title) return null;
+        return {
+            id: raw.id,
+            state: raw.state,
+            title,
+            item: typeof raw.item === "string" && itemIds.has(raw.item) ? raw.item : null,
+            checkedAt: parseTime(raw.checked_at),
+            staleAfter: staleAfterOf(raw.stale_after),
+            reason: cleanText(raw.reason, LIMITS.detail),
+            link: linkOf(raw.link),
+        };
+    }
+
+    /* One finding of an item, or null. ref: the time of its check (ms), which an acceptance may
+       not run more than MAX_ACCEPT_MS beyond; without it no acceptance counts. */
+    function validateFinding(raw, ref) {
+        if (!isObject(raw)) return null;
+        if (typeof raw.fid !== "string" || !FID_RE.test(raw.fid)) return null;
+        if (!isState(raw.state)) return null;
+        const title = cleanText(raw.title, LIMITS.title);
+        if (!title) return null;
+        const until = parseTime(raw.accepted_until);
+        return {
+            fid: raw.fid,
+            state: raw.state,
+            title,
+            since: parseTime(raw.since),
+            exposure: EXPOSURES.includes(raw.exposure) ? raw.exposure : null,
+            fix: FIXES.includes(raw.fix) ? raw.fix : null,
+            exploited: raw.exploited === "known" ? "known" : null,
+            acceptedUntil: until !== null && ref !== null && until <= ref + MAX_ACCEPT_MS ? until : null,
+            link: linkOf(raw.link),
+        };
+    }
+
+    /* The profile of a host (only Host Settings sends one): { roles, expect, skip, setAt }, or
+       null. Entries that break the rules, come twice or go past the limits are left out and
+       counted in drop.n. */
+    function validateProfile(raw, drop) {
+        if (!isObject(raw)) return null;
+        const list = (v, re, max) => {
+            const all = Array.isArray(v) ? v : [];
+            const kept = Array.from(new Set(all.filter(x => typeof x === "string" && re.test(x)))).slice(0, max);
+            drop.n += all.length - kept.length;
+            return kept;
+        };
+        const skip = [];
+        const seen = new Set();
+        const rawSkip = Array.isArray(raw.skip) ? raw.skip : [];
+        rawSkip.forEach(s => {
+            if (skip.length >= MAX_SKIP || !isObject(s) || typeof s.check !== "string" || !EXPECT_RE.test(s.check) || seen.has(s.check)) return;
+            seen.add(s.check);
+            skip.push({ check: s.check, reason: cleanText(s.reason, LIMITS.detail), until: parseTime(s.until) });
+        });
+        drop.n += rawSkip.length - skip.length;
+        return { roles: list(raw.roles, ROLE_RE, MAX_ROLES), expect: list(raw.expect, EXPECT_RE, MAX_EXPECT), skip, setAt: parseTime(raw.set_at) };
+    }
+
+    /* The optional parts of a valid answer (contract, "Optional: checks, findings and a host's
+       profile"), set on status; `raws` are the answer's items in the order of status.items.
+       What breaks the rules is left out and counted (status.extDropped); it never makes the
+       answer unreadable. */
+    function validateExtension(data, status, raws) {
+        const features = Array.isArray(data.features) ? FEATURES.filter(f => data.features.includes(f)) : [];
+        const drop = { n: 0 };
+        let checks = null;
+        if (features.includes("checks")) {
+            if (Array.isArray(data.checks)) {
+                checks = [];
+                const ids = new Set();
+                const itemIds = new Set(status.items.map(i => i.id));
+                data.checks.forEach(raw => {
+                    const c = checks.length < MAX_CHECKS ? validateCheck(raw, itemIds) : null;
+                    if (!c || ids.has(c.id)) {
+                        drop.n++;
+                        return;
+                    }
+                    ids.add(c.id);
+                    checks.push(c);
+                });
+            } else {
+                drop.n++;
+            }
+        }
+        if (features.includes("findings")) {
+            /* complete only where a check of state "checked" shows the item's result */
+            const owner = new Map((checks || []).filter(c => c.item !== null).map(c => [c.item, c]));
+            const fids = new Set();
+            let listed = 0;
+            status.items.forEach((item, i) => {
+                const raw = raws[i].findings;
+                if (raw === undefined) return;
+                if (!isObject(raw) || typeof raw.complete !== "boolean" || !Array.isArray(raw.list)) {
+                    drop.n++;
+                    return;
+                }
+                const ref = item.checkedAt !== null ? item.checkedAt : status.checkedAt;
+                const list = [];
+                let complete = raw.complete;
+                raw.list.forEach(r => {
+                    const f = listed < MAX_FINDINGS ? validateFinding(r, ref) : null;
+                    if (!f || fids.has(f.fid)) {
+                        drop.n++;
+                        complete = false;
+                        return;
+                    }
+                    fids.add(f.fid);
+                    list.push(f);
+                    listed++;
+                });
+                const check = owner.get(item.id);
+                if (!check || check.state !== "checked") complete = false;
+                const total = Number.isInteger(raw.total) && raw.total >= list.length && raw.total <= 1000000 ? raw.total : list.length;
+                item.findings = { complete, total, list };
+            });
+        }
+        let profile = null;
+        if (features.includes("profile") && data.addon === "host-settings") {
+            profile = validateProfile(data.profile, drop);
+            if (!profile) drop.n++;
+        }
+        return Object.assign(status, { features, checks, profile, extDropped: drop.n });
     }
 
     /* The output of `status --lang xx` of the package pkg: { ok: true, status } with every field
@@ -123,6 +279,7 @@
         if (!Array.isArray(data.items)) return fail("items");
 
         const items = [];
+        const raws = [];
         const seen = new Set();
         let dropped = 0;
         for (const raw of data.items) {
@@ -133,10 +290,11 @@
             }
             seen.add(item.id);
             items.push(item);
+            raws.push(raw);
         }
         return {
             ok: true,
-            status: {
+            status: validateExtension(data, {
                 addon: data.addon,
                 label: cleanText(data.label, LIMITS.label),
                 version: cleanText(data.version, LIMITS.version),
@@ -145,7 +303,7 @@
                 summary: cleanText(data.summary, LIMITS.summary),
                 items,
                 dropped,
-            },
+            }, raws),
         };
     }
 
@@ -153,6 +311,13 @@
        warning and info; else ok when one item is ok; else none. */
     function stateOfItems(items) {
         return items.reduce((s, it) => worse(s, it.state), "none");
+    }
+
+    /* An item's state at the time now (ms), never better than its open findings: those not
+       accepted, and those whose acceptance has ended (contract, "Findings"). */
+    function itemState(item, now) {
+        if (!item.findings) return item.state;
+        return item.findings.list.reduce((s, f) => (f.acceptedUntil === null || f.acceptedUntil <= now ? worse(s, f.state) : s), item.state);
     }
 
     /* What a tile of a valid status shows at the time now (ms):
@@ -164,11 +329,13 @@
                      warning), one with a value before one without, else the first
          items       every item in the add-on's order, each with its state at that time (out of
                      date: at least warning), staleAt (or null) and the word of its label
-         checkedAt   the time of the data: the status's own, else the newest item's */
+         checkedAt   the time of the data: the status's own, else the newest item's
+       An item with findings is never better than its open ones (itemState). */
     function evaluate(status, now) {
         let staleSince = null;
         const ranked = status.items.map((item, index) => {
-            let state = item.state;
+            const own = itemState(item, now);
+            let state = own;
             let staleAt = null;
             if (item.checkedAt !== null && item.staleAfter !== null) {
                 const at = item.checkedAt + item.staleAfter * 1000;
@@ -178,9 +345,9 @@
                     state = worse(state, "warning");
                 }
             }
-            return { item, index, state, staleAt, word: staleAt !== null && rank(item.state) < RANK.warning ? "stale" : state };
+            return { item, index, own, state, staleAt, word: staleAt !== null && rank(own) < RANK.warning ? "stale" : state };
         });
-        const reported = worse(status.state, stateOfItems(status.items));
+        const reported = ranked.reduce((s, r) => worse(s, r.own), status.state);
         const state = staleSince === null ? reported : worse(reported, "warning");
         const top = ranked.slice().sort((a, b) =>
             rank(b.state) - rank(a.state) || (b.item.value ? 1 : 0) - (a.item.value ? 1 : 0) || a.index - b.index)[0];
@@ -524,8 +691,9 @@
     const api = {
         STATES, RANK, LABEL_CLASS, LIMITS, MAX_ITEMS, MAX_PACKAGES, MAX_OUTPUT,
         PACKAGE_RE, ITEM_ID_RE, LINK_RE, COMMAND_RE,
+        FEATURES, CHECK_STATES, FID_RE, EXPECT_RE, MAX_CHECKS, MAX_FINDINGS, MAX_ACCEPT_MS,
         rank, worse, cleanText, parseTime,
-        validateStatus, stateOfItems, evaluate, classifyFailure, outputCollector,
+        validateStatus, stateOfItems, itemState, evaluate, classifyFailure, outputCollector,
         packageOfManifestPath, statusEntry, menuLabel, statusArgv, packagesOf,
         connectionString, parseMachines, buildBoard, sortHosts, reachOf, compareVersions, notable,
         coverageOf, coverageSummary,

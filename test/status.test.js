@@ -73,6 +73,17 @@ const EXPECT = {
     "hostile-schema-string.json": { pkg: "cronjobs", reason: "schema", detail: "1" },
     "hostile-types.json": { state: "info", reported: "info", items: 4, dropped: 6, key: "u" },
     "hostile-long.json": { state: "info", reported: "info", items: SB.MAX_ITEMS, dropped: 31, key: "item-0" },
+
+    /* the optional parts of version 1: checks, findings, a host's profile (written by a script, see
+       the tests "optional parts" below) */
+    "ext-good-security.json": { state: "danger", reported: "danger", items: 3, key: "exposure", value: "2", link: "#/exposure" },
+    /* says ok: one acceptance has ended, so that finding counts again */
+    "ext-good-update-gaps.json": { state: "warning", reported: "ok", items: 2, key: "restart", value: null, link: "#/restart" },
+    "ext-good-host-settings.json": { state: "ok", reported: "ok", items: 3, key: "setup", value: "1" },
+    "ext-broken-shapes.json": { state: "warning", reported: "warning", items: 3, key: "y", value: "1" },
+    "ext-hostile.json": { state: "danger", reported: "warning", items: 2, key: "exposure", value: "120" },
+    "ext-hostile-profile.json": { state: "ok", reported: "ok", items: 1, key: "run" },
+    "ext-incompatible-schema-2.json": { pkg: "security", reason: "schema", detail: "2" },
 };
 
 const statusFiles = fs.readdirSync(path.join(FIX, "status")).sort();
@@ -300,6 +311,119 @@ t("an entry out of date on its own", () => {
     const ev = SB.evaluate(st, NOW);
     assert.deepStrictEqual(ev.items.map(i => [i.id, i.state, i.word]), [["updates", "warning", "stale"]]);
     assert.strictEqual(ev.items[0].staleAt, ev.staleSince);
+});
+
+/* ---------- the optional parts of version 1: checks, findings, a host's profile ---------- */
+
+const ext = file => SB.validateStatus(read("status/" + file), JSON.parse(read("status/" + file)).addon).status;
+
+t("optional parts: an answer without them has none", () => {
+    const st = ext("real-security.json");
+    assert.deepStrictEqual([st.features, st.checks, st.profile, st.extDropped], [[], null, null, 0]);
+    assert.ok(st.items.every(i => i.findings === null));
+    assert.deepStrictEqual(st.items.map(i => SB.itemState(i, NOW)), st.items.map(i => i.state));
+});
+
+t("optional parts: checks and findings of the Security Monitor", () => {
+    const st = ext("ext-good-security.json");
+    assert.deepStrictEqual(st.features, ["checks", "findings"]);
+    assert.deepStrictEqual(st.checks.map(c => [c.id, c.state, c.item]),
+        [["exposure", "checked", "exposure"], ["containers", "partial", "containers"], ["fail2ban", "notapplicable", null]]);
+    assert.deepStrictEqual([st.checks[0].checkedAt, st.checks[0].staleAfter, st.checks[2].reason],
+        [Date.UTC(2026, 9, 19, 18, 50), 3600, "fail2ban is not installed"]);
+    const exp = st.items[0].findings;
+    assert.deepStrictEqual([exp.complete, exp.total], [true, 2]);
+    assert.deepStrictEqual(exp.list.map(f => [f.fid, f.state, f.exposure, f.fix, f.exploited, f.acceptedUntil, f.link]), [
+        ["port.5432-tcp", "danger", "internet", "available", null, null, "#/exposure/5432-tcp"],
+        ["port.6379-tcp", "danger", "internet", "available", null, null, "#/exposure/6379-tcp"]]);
+    assert.strictEqual(exp.list[1].since, Date.UTC(2026, 9, 17, 7, 30));
+    assert.deepStrictEqual(st.items[1].findings, { complete: false, total: 0, list: [] }, "a list is complete only where its check is checked");
+    assert.strictEqual(st.items[2].findings, null);
+    assert.strictEqual(st.extDropped, 0);
+});
+
+t("optional parts: an acceptance that runs, and one that has ended", () => {
+    const st = ext("ext-good-update-gaps.json");
+    assert.strictEqual(st.items[0].findings.list[0].acceptedUntil, Date.UTC(2026, 9, 30));
+    assert.deepStrictEqual(st.items.map(i => SB.itemState(i, NOW)), ["ok", "warning"]);
+    assert.strictEqual(SB.itemState(st.items[0], Date.UTC(2026, 9, 30)), "warning", "on the day it ends the finding counts again");
+    const ev = SB.evaluate(st, NOW);
+    assert.deepStrictEqual(ev.items.map(i => [i.id, i.state, i.word]), [["held", "ok", "ok"], ["restart", "warning", "warning"]]);
+    assert.strictEqual(ev.byAge, false);
+    assert.deepStrictEqual(st.checks.map(c => c.state), ["checked", "checked", "unconfigured"]);
+});
+
+t("optional parts: a host's profile, only from Host Settings and only when declared", () => {
+    const st = ext("ext-good-host-settings.json");
+    assert.deepStrictEqual(st.profile, {
+        roles: ["web"], expect: ["host-settings", "update-gaps", "security", "cronjobs", "image-updates"],
+        skip: [{ check: "update-gaps/cve", reason: "network data off on purpose", until: null }], setAt: Date.UTC(2026, 9, 19, 9) });
+    assert.strictEqual(st.checks[0].item, "run");
+    const other = Object.assign(JSON.parse(read("status/ext-good-host-settings.json")), { addon: "security" });
+    assert.strictEqual(SB.validateStatus(JSON.stringify(other), "security").status.profile, null, "from another add-on");
+    const undeclared = Object.assign(JSON.parse(read("status/ext-good-host-settings.json")), { features: ["checks"] });
+    assert.strictEqual(SB.validateStatus(JSON.stringify(undeclared), "host-settings").status.profile, null, "without the feature");
+});
+
+t("optional parts: only what features declares is read", () => {
+    const doc = JSON.parse(read("status/ext-good-security.json"));
+    for (const features of [undefined, null, "checks", { checks: true }, [], ["Checks"]]) {
+        const st = SB.validateStatus(JSON.stringify(Object.assign({}, doc, { features })), "security").status;
+        assert.deepStrictEqual([st.features, st.checks, st.items[0].findings, st.extDropped], [[], null, null, 0], JSON.stringify(features));
+    }
+    const checksOnly = SB.validateStatus(JSON.stringify(Object.assign({}, doc, { features: ["checks"] })), "security").status;
+    assert.deepStrictEqual([checksOnly.checks.length, checksOnly.items[0].findings], [3, null]);
+    const findingsOnly = SB.validateStatus(JSON.stringify(Object.assign({}, doc, { features: ["findings"] })), "security").status;
+    assert.deepStrictEqual([findingsOnly.checks, findingsOnly.items[0].findings.list.length, findingsOnly.items[0].findings.complete], [null, 2, false],
+        "without checks no list is complete");
+});
+
+t("optional parts: shapes the board cannot use are left out and counted", () => {
+    const st = ext("ext-broken-shapes.json");
+    assert.deepStrictEqual([st.checks, st.profile, st.extDropped], [null, null, 4]);
+    assert.ok(st.items.every(i => i.findings === null));
+});
+
+t("optional parts: hostile checks and findings", () => {
+    const st = ext("ext-hostile.json");
+    assert.deepStrictEqual(st.features, ["checks", "findings", "profile"]);
+    assert.strictEqual(st.checks.length, SB.MAX_CHECKS);
+    assert.deepStrictEqual(st.checks.slice(0, 3).map(c => [c.id, c.state, c.item, c.link]),
+        [["constructor", "checked", "constructor", null], ["exposure", "partial", "exposure", null], ["w", "checked", null, null]]);
+    const [c, e] = st.items.map(i => i.findings);
+    assert.deepStrictEqual(c.list.map(f => f.fid), ["constructor", "accept-far", "odd"]);
+    assert.deepStrictEqual([c.complete, c.total], [false, 3], "a list with entries left out is not complete");
+    assert.strictEqual(c.list[1].acceptedUntil, null, "an acceptance more than 90 days after the check does not count");
+    const odd = c.list[2];
+    assert.deepStrictEqual([odd.title, odd.exposure, odd.fix, odd.exploited, odd.since, odd.link], ["Oddddo", null, null, null, null, null]);
+    assert.strictEqual(c.list.length + e.list.length, SB.MAX_FINDINGS);
+    assert.deepStrictEqual([e.complete, e.total], [false, 120]);
+    assert.strictEqual(st.profile, null, "a profile from another add-on than Host Settings is not read");
+    /* checks: 5 broken or twice, 3 past 50; findings: 4 broken or twice, 23 past 100 */
+    assert.strictEqual(st.extDropped, 35);
+    assert.strictEqual(SB.itemState(st.items[0], NOW), "danger", "the acceptance ten years ahead hides nothing");
+    assert.ok(({}).constructor === Object && Object.prototype.polluted === undefined, "names every object has are only data");
+});
+
+t("optional parts: a hostile profile", () => {
+    const st = ext("ext-hostile-profile.json");
+    assert.deepStrictEqual(st.profile.roles, ["web", "db", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8"]);
+    assert.deepStrictEqual(st.profile.expect, ["security", "security/exposure", "constructor"]);
+    assert.deepStrictEqual(st.profile.skip.map(s => [s.check, s.reason, s.until]),
+        [["update-gaps/cve", "off", Date.UTC(2026, 10, 1)], ["security/fail2ban", "<b>CrowdSec</b> instead", null]]);
+    assert.strictEqual(st.profile.setAt, null);
+    assert.strictEqual(st.extDropped, 12);
+});
+
+t("optional parts: every text is cleaned and cut", () => {
+    ["ext-good-security.json", "ext-good-update-gaps.json", "ext-good-host-settings.json", "ext-hostile.json", "ext-hostile-profile.json"].forEach(f => {
+        const st = ext(f);
+        const texts = [].concat(
+            (st.checks || []).flatMap(c => [c.title, c.reason]),
+            st.items.flatMap(i => (i.findings ? i.findings.list.map(x => x.title) : [])),
+            st.profile ? st.profile.skip.map(s => s.reason) : []).filter(x => x !== null);
+        texts.forEach(x => assert.ok(typeof x === "string" && SB.cleanText(x, 1000) === x && Array.from(x).length <= SB.LIMITS.detail, f + ": " + JSON.stringify(x)));
+    });
 });
 
 /* ---------- only what needs attention ---------- */

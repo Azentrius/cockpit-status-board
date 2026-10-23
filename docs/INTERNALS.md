@@ -169,6 +169,15 @@ host and names the add-ons with a gap. A single item in state `none` is no gap: 
 for jobs without recording and Image Update Monitor for no pending roll-out, so version 1 of
 the contract cannot tell "nothing to rate" from "could not check".
 
+**Checks, findings, profile** (the optional parts of the contract): `validateStatus()` reads them
+when `features` names them (`validateExtension()`): `status.features`, `status.checks`,
+`item.findings`, `status.profile` (only from Host Settings), and `status.extDropped` for what it
+left out. Every list is bounded (50 checks, 100 findings per answer, 10 roles, 100 expectations,
+50 skips), ids are kept in `Set`s and `Map`s, never as keys of plain objects, and a list counts as
+complete only with a `checked` check naming its item. `evaluate()` takes an item's state from
+`itemState()`: never better than its open findings. The tiles and the coverage do not use the
+rest yet; `test/fixtures/status/ext-*.json` are the good, broken, hostile and incompatible answers.
+
 **Versions.** A tile names the add-on's version in its facts. `buildBoard()` compares the versions
 of the same add-on on all hosts (`compareVersions()`: three numbers, a suffix such as `~dev…` or
 `-rc1` before the release; anything else is not compared) and gives every older tile the newest one
