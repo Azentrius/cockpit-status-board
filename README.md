@@ -32,8 +32,8 @@ and changes nothing on any host; a click on a tile opens the add-on on its host.
 ## What it shows
 
 - **One row per host,** in the order of the host switcher, this host first. The row's header names
-  the host, the connection when it differs (`stefan@public-host`, `claw-host:2222`) and the most
-  severe state of its add-ons, or why the host cannot be read ("Unreachable", "Key locked").
+  the host, the connection when it differs (`admin@web1`, `db1:2222`) and the most severe state of
+  its add-ons, or why the host cannot be read ("Unreachable", "Key locked").
 - **One tile per add-on:** its state in the status language (OK, Notice, Warning, Problem, Unknown),
   its most important figure with its title below it ("3" over "Updates available"), its summary
   and the age of its data. The tiles stand in the same order on every host, so gaps show: an
@@ -197,15 +197,19 @@ host switcher, check once (all seven passed on a bastion with three hosts on 202
 ## Safety
 
 - Read-only: the page runs `find` with fixed arguments and each add-on's status command, and reads
-  manifests and the host name. It asks for no administrative access and has no actions.
+  manifests and the host name. It asks for no administrative access and has no actions. The status
+  commands run with `superuser: "try"`: as root on a host where the session has administrative
+  access, as the logged-in user elsewhere.
 - Status commands run only from below `/usr/lib/cockpit-`, always with `status --lang en|de`;
   other arguments from a manifest are ignored. Manifests come with the packages and belong to root.
 - What a host sends is data: every answer is checked against the contract, texts are cut and
   stripped of control and bidirectional characters and set as text only, links must stay inside
   the add-on's page, and jumps go only to plain package folders. A host can name only its own
   tiles. A compromised host can report a false state, but it cannot run code in the session.
-- No JavaScript from other hosts, no files from Cockpit itself, nothing from the network: the page
-  brings its own fonts and icons, and Cockpit's strict CSP stays as it is.
+- No JavaScript from other hosts and nothing from the network. Of Cockpit's own files the page loads
+  only `../base1/cockpit.js` (the API), `../base1/po.js` (its translation) and `../manifests.js`
+  (the manifests of this host's packages); it brings its own fonts and icons, and Cockpit's strict
+  CSP stays as it is.
 
 ## Translations
 
@@ -225,8 +229,8 @@ make packages     # dist/*.deb and dist/*.rpm (needs dpkg-deb and rpmbuild), rep
 ```
 
 `python3 test/serve.py` serves the page with the stand-in at
-`http://127.0.0.1:8773/pkg/status-board/index.html` (`?scenario=real`, `hostile`, `broken` or
-`empty`, `?lang=en`). The fixtures in `test/fixtures` are written for 2026-10-19 19:00 UTC; the browser
+`http://127.0.0.1:8773/pkg/status-board/index.html` (`?scenario=real`, `edge`, `hostile`, `broken`
+or `empty`, `?lang=en`). The fixtures in `test/fixtures` are written for 2026-10-19 19:00 UTC; the browser
 tests set their clock to it. The shared design files in `src/` are byte-identical copies from
 Cron Jobs (`tools/design-files.sha256`); never change them here.
 
@@ -273,6 +277,8 @@ More in [CONTRIBUTING.md](CONTRIBUTING.md).
   but asks no add-on to check again. It loads only while the page is open and notifies no one.
 - A host that does not answer within 20 seconds is "Unreachable"; a status command has 20 seconds
   as well. At most 200 packages per host and 50 entries per answer count.
+- An answer of a status command may be 64 KiB at most: the board stops reading a longer one as soon
+  as it passes that size, and the tile says so.
 - Versions are compared between the hosts only; the board does not look for new releases.
 
 ## License
