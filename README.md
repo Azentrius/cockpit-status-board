@@ -11,7 +11,7 @@ It belongs on the Cockpit host from which the others are reached.
 Status Board only reads. It runs each add-on's `status` verb, asks for no administrative access
 and changes nothing on any host; a click on a tile opens the add-on on its host.
 
-![The board on a bastion with three hosts behind it, one tile per add-on](docs/img/board.png)
+![The board on a bastion with three hosts behind it: the coverage above, one tile per add-on](docs/img/board.png)
 
 **Contents**
 
