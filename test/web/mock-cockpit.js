@@ -6,9 +6,10 @@
  * test/serve.py): the manifests, and the output of each add-on's status verb, the German one
  * when there is a .de.json and the page asks with --lang de.
  *
- * Query parameters: scenario=default|real|edge|hostile|broken|empty, chunk (characters per streamed chunk), badhosts=1 (the invalid names of the
+ * Query parameters: scenario=default|real|tasks|edge|hostile|broken|empty, chunk (characters per streamed chunk), badhosts=1 (the invalid names of the
  * machines fixture stay in the list), delay (ms per answer). Tests change window.__mock at run
- * time and read what the page did from it: calls, jumps, watches, unexpected. */
+ * time and read what the page did from it: calls, jumps, watches, unexpected, locations (every
+ * cockpit.location.go()). The page's location is its hash (#/hosts), as in Cockpit. */
 (function () {
     "use strict";
     const params = new URLSearchParams(location.search);
@@ -107,6 +108,39 @@
                 },
             };
         },
+        /* The optional parts of the contract next to answers without them, for the tab "Needs
+           attention": Security Monitor and Update Gaps with checks and findings (two ports
+           reachable from the internet, a check done in part, an acceptance that runs and one that
+           has ended, a check not set up, one that does not apply), Host Settings with checks and a
+           profile; Cron Jobs and Image Update Monitor as before (summary only, no access, out of
+           date); a host that cannot be reached and one with a locked key. */
+        tasks: () => {
+            const machines = machinesFixture();
+            delete machines["claw-host"];
+            return {
+                machines,
+                hosts: {
+                    localhost: host("vpn-host", Object.assign(cockpitPackages(), {
+                        "host-settings": pkg("host-settings", "ext-good-host-settings"),
+                        cronjobs: pkg("cronjobs", "good-cronjobs-ok"),
+                    })),
+                    "stefan@public-host": host("public-host", {
+                        system: pkg("system", null),
+                        cronjobs: pkg("cronjobs", "good-cronjobs-danger"),
+                        "image-updates": pkg("image-updates", "good-image-updates"),
+                        security: pkg("security", "ext-good-security"),
+                        "update-gaps": pkg("update-gaps", "ext-good-update-gaps"),
+                    }),
+                    "build-host": host("build-host", {
+                        system: pkg("system", null),
+                        cronjobs: pkg("cronjobs", { exit: 77, message: "" }),
+                        "image-updates": pkg("image-updates", "good-image-updates-stale"),
+                    }),
+                    "old-host": { reach: "no-host" },
+                    "locked-host": { reach: "locked" },
+                },
+            };
+        },
         /* Package names that are also names of what every object inherits ("constructor"), and
            status output at and past the limit of 64 KiB, streamed in chunks; one host that is fine. */
         edge: () => ({
@@ -194,8 +228,10 @@
         jumps: [],
         watches: [],
         unexpected: [],
+        locations: [],
         dbusOpen: 0,
         listeners: [],
+        locationListeners: [],
         /* cockpit.manifests of this host, as ../manifests.js gives them */
         localManifests() {
             const out = {};
@@ -429,6 +465,25 @@
         };
     }
 
+    /* cockpit.location as cockpit.js keeps it: the path of the page's hash ("#/hosts" is
+       ["hosts"], an empty hash []); go() sets the hash. Every change of the hash (go(), Back, the
+       shell) fires "locationchanged". */
+    function currentLocation() {
+        const href = window.location.hash.replace(/^#/, "");
+        const q = href.indexOf("?");
+        return {
+            href,
+            path: (q === -1 ? href : href.slice(0, q)).split("/").filter(Boolean).map(decodeURIComponent),
+            options: {},
+            go(path) {
+                const target = "/" + (Array.isArray(path) ? path.map(encodeURIComponent).join("/") : String(path).replace(/^\//, ""));
+                M.locations.push(target);
+                window.location.hash = "#" + target;
+            },
+        };
+    }
+    window.addEventListener("hashchange", () => M.locationListeners.slice().forEach(f => f({ type: "locationchanged" })));
+
     window.cockpit = {
         language: "en",
         transport: { host: "localhost" },
@@ -439,6 +494,10 @@
         channel,
         dbus,
         jump: (path, target) => M.jumps.push([path, target === undefined ? null : target]),
-        addEventListener: (type, f) => { if (type === "visibilitychange") M.listeners.push(f); },
+        addEventListener: (type, f) => {
+            if (type === "visibilitychange") M.listeners.push(f);
+            else if (type === "locationchanged") M.locationListeners.push(f);
+        },
     };
+    Object.defineProperty(window.cockpit, "location", { get: currentLocation, enumerable: true });
 }());

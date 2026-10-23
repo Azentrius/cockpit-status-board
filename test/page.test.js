@@ -86,6 +86,20 @@ t("an entry opens its place only through jumpTo, which checks package and link",
         "entries of other hosts open nothing without the host switcher");
 });
 
+t("a task opens its place only through jumpTo, and only where a tile would", () => {
+    assert.ok(app.includes("onclick: () => jumpTo(task.host, task.tile, task.link)"), "the task's button");
+    assert.strictEqual(app.split("const go = !!tile.jump && (host.own || OTHER_HOSTS);").length - 1, 2, "tiles and tasks decide alike");
+    const jumps = app.match(/cockpit\.jump\(/g) || [];
+    assert.strictEqual(jumps.length, 3, "cockpit.jump only in jumpTo: this host, another host, a host's Overview");
+});
+
+t("the tab is the page's own location, one of two fixed names", () => {
+    assert.ok(app.includes('const TABS = ["tasks", "hosts"];'));
+    assert.ok(app.includes("return TABS.includes(first) ? first : \"tasks\";"), "anything else in the location is the first tab");
+    assert.deepStrictEqual(app.match(/cockpit\.location\.[a-z]+\(/g), ["cockpit.location.go("], "only go(), with a tab");
+    assert.ok(app.includes("cockpit.location.go([tab])"));
+});
+
 t("the browser keeps only the language read and the switch, and storage may fail", () => {
     const uses = app.match(/localStorage\.[a-zA-Z]+\([^)]*\)/g) || [];
     assert.deepStrictEqual(uses, ['localStorage.getItem("cockpit.lang")', "localStorage.getItem(NOTABLE_KEY)", 'localStorage.setItem(NOTABLE_KEY, on ? "1" : "0")']);

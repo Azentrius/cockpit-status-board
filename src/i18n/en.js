@@ -17,7 +17,9 @@
         loadedAt: t => `Loaded at ${t}`,
         hostCount: n => (n === 1 ? "1 host" : `${n} hosts`),
         sourceCode: "Source code",
-        boardLabel: "Hosts",
+        tabsLabel: "Views",
+        tabTasks: "Needs attention",
+        tabHosts: "Hosts and coverage",
         thisHost: "this host",
         justNow: "just now",
         checked: when => `Checked ${when}`,
@@ -48,7 +50,59 @@
             stale: "out of date",
             noaccess: "no access",
             unreadable: "status unreadable",
+            partial: "partly checked",
+            failed: "check failed",
+            unconfigured: "not set up",
+            unsupported: "not supported",
         },
+        /* The check that shows a gap, after the add-on's name: "Security Monitor: Container
+           hardening partly checked". */
+        checkGap: {
+            partial: check => `${check} partly checked`,
+            stale: check => `${check} out of date`,
+            failed: check => `${check} failed`,
+            unconfigured: check => `${check} not set up`,
+            noaccess: check => `${check} without access`,
+            unsupported: check => `${check} not supported here`,
+        },
+
+        /* The tab "Needs attention". */
+        newMark: "new",
+        /* Why a task stands where it does. */
+        chips: {
+            internet: "reachable from the internet",
+            restricted: "reachable from some addresses",
+            exploited: "known to be exploited",
+            fix: "fix available",
+            summary: "summary only",
+            unknown: "findings unknown",
+        },
+        factSince: "Since",
+        factEvidence: "Evidence",
+        factResolved: "Resolved when",
+        evidence: {
+            complete: t => `Checked ${t}, complete`,
+            partial: t => `Checked ${t}, partial`,
+        },
+        resolved: {
+            finding: "a complete check no longer finds it",
+            item: "the add-on rates the entry OK again",
+            coverage: "the add-on answers in time, with every check complete",
+            host: "the board can read the host again",
+        },
+        openIn: name => `Open in ${name}`,
+        uncheckedText: "The add-on answers, but rates nothing yet.",
+        staleText: t => `Its data is out of date since ${t}.`,
+        accepted: "Accepted",
+        notApplicable: "Not applicable",
+        colHost: "Host",
+        colAddon: "Add-on",
+        colFinding: "Finding",
+        colUntil: "Accepted until",
+        colCheck: "Check",
+        colReason: "Reason",
+        tasksEmptyTitle: "Nothing needs attention",
+        tasksEmptyBody: "No add-on reports anything that needs attention, and every host and add-on could be read in time. That means the add-ons found nothing in what they check, not that the hosts are safe.",
 
         /* The word of a tile's label, by state or kind. */
         words: {
@@ -116,7 +170,7 @@
         manifest: "Its manifest could not be read.",
 
         emptyTitle: "No add-ons with a status",
-        emptyBody: "None of the hosts below has an Azentrius add-on that reports its status yet.",
+        emptyBody: "None of the hosts has an Azentrius add-on that reports its status yet.",
         hostEmpty: "No Azentrius add-ons with a status on this host.",
 
         machinesFailed: "The host switcher's list could not be read",

@@ -521,20 +521,58 @@
        answer that rates nothing are warnings (gaps in what the board knows), so they do. */
     const notable = tile => tile.kind === "loading" || rank(tile.state) >= RANK.info;
 
-    /* What the board knows about an add-on on a host (its coverage), from its tile:
-         checked     a valid answer that rates something, in time
-         unchecked   a valid answer that rates nothing (every item none, or none at all)
-         stale       a valid answer out of date
-         noaccess    nothing readable without administrative access (exit 77)
-         unreadable  no usable answer (Status unreadable, Command refused)
+    /* The gaps a check can show, worst first (contract, "Checks and coverage"); a check that is
+       "checked" and in time shows none, one that is "notapplicable" does not count. */
+    const CHECK_GAPS = ["noaccess", "unconfigured", "failed", "unsupported", "stale", "partial"];
+    const checkRank = coverage => (coverage === "checked" ? 0 : CHECK_GAPS.length - CHECK_GAPS.indexOf(coverage));
+
+    /* What one check says at the time now: its state as coverage, "stale" for a checked or partial
+       check past checked_at + stale_after (staleAt: since when), else null for staleAt. */
+    function checkCoverage(check, now) {
+        const at = check.checkedAt !== null && check.staleAfter !== null ? check.checkedAt + check.staleAfter * 1000 : null;
+        const stale = at !== null && now > at && (check.state === "checked" || check.state === "partial");
+        return { coverage: stale ? "stale" : check.state, staleAt: stale ? at : null };
+    }
+
+    /* The coverage of a valid answer from its checks at the time now: the worst of the checks that
+       apply (all but "notapplicable"), the check that shows it (worst, the first of the worst in the
+       add-on's order, or null) and every check with a gap (gaps, in the add-on's order, each with
+       its coverage and staleAt). null when the answer has no checks, or none that applies: then
+       its items decide, as for answers without checks. */
+    function checksCoverage(status, now) {
+        if (!Array.isArray(status.checks)) return null;
+        const judged = status.checks.filter(c => c.state !== "notapplicable").map(c => Object.assign({}, c, checkCoverage(c, now)));
+        if (!judged.length) return null;
+        const gaps = judged.filter(c => c.coverage !== "checked");
+        const worst = gaps.reduce((w, c) => (w === null || checkRank(c.coverage) > checkRank(w.coverage) ? c : w), null);
+        return { coverage: worst ? worst.coverage : "checked", worst, gaps };
+    }
+
+    /* What the board knows about an add-on on a host (its coverage), from its tile at the time now:
+         checked       a valid answer that rates something, in time (with checks: every check that
+                       applies is checked and in time)
+         unchecked     a valid answer that rates nothing (every item none, or none at all)
+         stale         a valid answer out of date (with checks: a checked or partial check past its
+                       checked_at + stale_after)
+         noaccess      nothing readable without administrative access (exit 77, or a check in
+                       state noaccess)
+         unreadable    no usable answer (Status unreadable, Command refused)
+         partial, failed, unconfigured, unsupported
+                       only from checks: the state of the worst check
+       An answer with checks takes the worst of its checks that apply (checksCoverage()); an answer
+       without them is judged by its tile as before.
        null for a tile that is no installed add-on with a status entry (Not installed, No status)
        and for a host that cannot be read: no check of an add-on is missing there.
        A single item in state none is no gap: add-ons use none for "nothing to rate" as well (Cron
        Jobs' jobs without recording, Image Update Monitor's rollout), so contract version 1 cannot
-       tell it from "could not check". */
-    function coverageOf(tile) {
+       tell it from "could not check"; only a check in state partial says that. */
+    function coverageOf(tile, now) {
         switch (tile.kind) {
-        case "status": return tile.word === "unchecked" ? "unchecked" : tile.eval.staleSince !== null ? "stale" : "checked";
+        case "status": {
+            const fromChecks = checksCoverage(tile.status, now);
+            if (fromChecks) return fromChecks.coverage;
+            return tile.word === "unchecked" ? "unchecked" : tile.eval.staleSince !== null ? "stale" : "checked";
+        }
         case "noaccess": return "noaccess";
         case "error":
         case "rejected": return "unreadable";
@@ -544,8 +582,9 @@
 
     /* The coverage of the whole board: how many add-ons with a status entry the hosts that could be
        read have (total), how many of them answered in time with something rated (checked), the
-       others by coverage (gaps), and how many hosts could not be read at all (unread: unreachable,
-       locked key, find failed; hosts still loading do not count). */
+       others by coverage (gaps: the four kinds of answers without checks always, partial, failed,
+       unconfigured and unsupported once one of them occurs), and how many hosts could not be read
+       at all (unread: unreachable, locked key, find failed; hosts still loading do not count). */
     function coverageSummary(rows) {
         const out = { total: 0, checked: 0, gaps: { unchecked: 0, stale: 0, noaccess: 0, unreadable: 0 }, unread: 0, unreadState: "none" };
         rows.forEach(row => row.tiles.forEach(t => {
@@ -555,7 +594,7 @@
             } else if (t.coverage) {
                 out.total++;
                 if (t.coverage === "checked") out.checked++;
-                else out.gaps[t.coverage]++;
+                else out.gaps[t.coverage] = (out.gaps[t.coverage] || 0) + 1;
             }
         }));
         return out;
@@ -593,7 +632,9 @@
                   { reach: "ok", discovery: "failed", message }
                   { reach: "ok", discovery: "ok", packages: packagesOf(…), results: { pkg: result } }
        Returns [{ host, state, tiles, coverage }]: every tile carries its coverage (coverageOf()),
-       the row's coverage is { total, checked, gaps: [{ pkg, label, coverage }] } or null.
+       and for an answer with checks the check that shows a gap (gapCheck, or null) and every check
+       with a gap (gapChecks, else []); the row's coverage is
+       { total, checked, gaps: [{ pkg, label, coverage, check? }] } or null.
        An add-on with a status entry on one host gets a tile on every host it could be read
        from: "missing" where the package is not installed, "nostatus" where it is, in a version
        without the status entry.
@@ -644,13 +685,20 @@
                 }).sort(byName);
             }
             const state = tiles.reduce((s, t) => worse(s, t.state), "none");
-            tiles.forEach(t => { t.coverage = coverageOf(t); });
+            tiles.forEach(t => {
+                const fromChecks = t.kind === "status" ? checksCoverage(t.status, now) : null;
+                t.coverage = coverageOf(t, now);
+                t.gapCheck = fromChecks ? fromChecks.worst : null;
+                t.gapChecks = fromChecks ? fromChecks.gaps : [];
+            });
             const covered = tiles.filter(t => t.coverage);
-            /* null where no add-on with a status entry could be read (the host's tile says why) */
+            /* null where no add-on with a status entry could be read (the host's tile says why); a
+               gap that comes from a check names it (check: its title) */
             const coverage = covered.length ? {
                 total: covered.length,
                 checked: covered.filter(t => t.coverage === "checked").length,
-                gaps: covered.filter(t => t.coverage !== "checked").map(t => ({ pkg: t.pkg, label: t.label, coverage: t.coverage })),
+                gaps: covered.filter(t => t.coverage !== "checked").map(t =>
+                    Object.assign({ pkg: t.pkg, label: t.label, coverage: t.coverage }, t.gapCheck ? { check: t.gapCheck.title } : {})),
             } : null;
             return { host, state, tiles, coverage };
         });
@@ -665,6 +713,118 @@
             if (compareVersions(t.status.version, newest[t.pkg]) < 0) t.newer = newest[t.pkg];
         });
         return rows;
+    }
+
+    /* ---------- what needs attention: the tasks over all hosts ---------- */
+
+    /* A finding is new for a day after the add-on first saw it. */
+    const NEW_MS = 86400 * 1000;
+    const EXPOSURE_ORDER = { internet: 0, restricted: 1, internal: 2, local: 3 };
+    const UNREAD_KINDS = ["unreachable", "locked", "discovery"];
+    const exposureOrder = e => (typeof e === "string" && own(EXPOSURE_ORDER, e) ? EXPOSURE_ORDER[e] : 4);
+    const byText = (a, b) => a.localeCompare(b, "en", { sensitivity: "base", numeric: true }) || (a < b ? -1 : a > b ? 1 : 0);
+    /* older first; without a time after those with one */
+    const bySince = (a, b) => (a === b ? 0 : a === null ? 1 : b === null ? -1 : a - b);
+
+    /* The order of the tasks (no score): state (Problem, Warning, Notice); then a host that cannot
+       be read, which hides everything else on it; exposure (internet, restricted, internal, local,
+       unknown); known to be exploited; older first; then host (in the board's order), add-on (in
+       the board's order of tiles) and title. */
+    function compareTasks(a, b) {
+        return rank(b.state) - rank(a.state) ||
+            (b.kind === "host" ? 1 : 0) - (a.kind === "host" ? 1 : 0) ||
+            exposureOrder(a.exposure) - exposureOrder(b.exposure) ||
+            (b.exploited === "known" ? 1 : 0) - (a.exploited === "known" ? 1 : 0) ||
+            bySince(a.since, b.since) ||
+            a.hostIndex - b.hostIndex ||
+            byText(a.sortLabel, b.sortLabel) ||
+            byText(a.title, b.title) ||
+            (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+    }
+
+    /* What needs attention on all hosts, from the rows of buildBoard() at the time now:
+         tasks          in the order of compareTasks(), each one of
+           kind "finding"   an open finding of item.findings (not accepted, or its acceptance has
+                            ended) in state info or worse
+           kind "item"      an item in state info or worse that is shown by no finding (an add-on
+                            without findings, or none of its findings is open or accepted);
+                            summaryOnly when the add-on sends no optional part at all
+           kind "coverage"  a gap in the coverage of an add-on of a host that could be read
+                            (coverageOf(): from its checks or from its tile), always a warning
+           kind "host"      a host that cannot be read (Unreachable, Key locked, Add-ons
+                            unreadable), in the state of its tile
+         accepted       the findings in state info or worse whose acceptance runs, soonest end first
+         notApplicable  the checks in state notapplicable, with their reason
+       Every task carries host, tile (for the jump), key (unique on the board), state, title (a
+       text of the host, or "" where the page names it), since (or null), isNew (since less than a
+       day ago), exposure, exploited and fix (findings only, else null), link (the place in the
+       add-on: the finding's, else its item's; the item's; the gap check's, else the link of its
+       item; null: the tile's own) and evidence ({ at, complete }: the time of the owning check,
+       else the item's, else the answer's; complete true or false when a check owns the item, null
+       without one). An item's state is its own: out of date is a gap of the coverage, not a task
+       per item. Nothing here is a text of the page; nothing of a host is used as a key of an
+       object. */
+    function buildTasks(rows, now) {
+        const tasks = [];
+        const accepted = [];
+        const notApplicable = [];
+        rows.forEach((row, hostIndex) => row.tiles.forEach(tile => {
+            const host = row.host;
+            const base = { host, tile, hostIndex, sortLabel: tile.sortLabel || "", pkg: tile.pkg || null, since: null, isNew: false,
+                           exposure: null, exploited: null, fix: null, link: null, evidence: null };
+            const add = extra => tasks.push(Object.assign({}, base, extra));
+            if (UNREAD_KINDS.includes(tile.kind)) {
+                add({ kind: "host", key: host.key + "/" + tile.kind, state: tile.state, title: "" });
+                return;
+            }
+            if (!tile.coverage) return;
+            const st = tile.kind === "status" ? tile.status : null;
+            const items = st ? st.items : [];
+            const linkOfItem = id => {
+                const item = items.find(i => i.id === id);
+                return item ? item.link : null;
+            };
+            if (tile.coverage !== "checked") {
+                const check = tile.gapCheck;
+                add({ kind: "coverage", key: host.key + "/" + tile.pkg + "/coverage", state: "warning", title: check ? check.title : "",
+                      coverage: tile.coverage, check, checks: tile.gapChecks,
+                      link: check ? check.link || (check.item !== null ? linkOfItem(check.item) : null) || "" : null,
+                      evidence: st ? { at: check && check.checkedAt !== null ? check.checkedAt : tile.eval.checkedAt, complete: null } : null });
+            }
+            if (!st) return;
+            const checks = st.checks || [];
+            checks.filter(c => c.state === "notapplicable").forEach(c => notApplicable.push({ host, tile, hostIndex, check: c }));
+            const owner = new Map(checks.filter(c => c.item !== null).map(c => [c.item, c]));
+            const summaryOnly = st.features.length === 0;
+            items.forEach(item => {
+                const check = owner.has(item.id) ? owner.get(item.id) : null;
+                const at = check && check.checkedAt !== null ? check.checkedAt : item.checkedAt !== null ? item.checkedAt : st.checkedAt;
+                let shown = false;
+                if (item.findings) {
+                    item.findings.list.forEach(f => {
+                        if (rank(f.state) < RANK.info) return;
+                        shown = true;
+                        if (f.acceptedUntil !== null && f.acceptedUntil > now) {
+                            accepted.push({ host, tile, hostIndex, item, finding: f, until: f.acceptedUntil, key: host.key + "/" + tile.pkg + "/finding:" + f.fid });
+                            return;
+                        }
+                        add({ kind: "finding", key: host.key + "/" + tile.pkg + "/finding:" + f.fid, state: f.state, title: f.title, item, finding: f,
+                              since: f.since, isNew: f.since !== null && now - f.since < NEW_MS,
+                              exposure: f.exposure, exploited: f.exploited, fix: f.fix, link: f.link || item.link || "",
+                              evidence: at !== null ? { at, complete: item.findings.complete } : null });
+                    });
+                }
+                if (shown || rank(item.state) < RANK.info) return;
+                add({ kind: "item", key: host.key + "/" + tile.pkg + "/item:" + item.id, state: item.state, title: item.title, item, summaryOnly,
+                      link: item.link || "",
+                      evidence: at !== null ? { at, complete: check ? checkCoverage(check, now).coverage === "checked" : null } : null });
+            });
+        }));
+        tasks.sort(compareTasks);
+        accepted.sort((a, b) => a.until - b.until || a.hostIndex - b.hostIndex || byText(a.tile.sortLabel, b.tile.sortLabel) ||
+            byText(a.finding.title, b.finding.title));
+        notApplicable.sort((a, b) => a.hostIndex - b.hostIndex || byText(a.tile.sortLabel, b.tile.sortLabel) || byText(a.check.title, b.check.title));
+        return { tasks, accepted, notApplicable };
     }
 
     /* The order of the hosts: this host first, then by label as in the host switcher. */
@@ -696,7 +856,7 @@
         validateStatus, stateOfItems, itemState, evaluate, classifyFailure, outputCollector,
         packageOfManifestPath, statusEntry, menuLabel, statusArgv, packagesOf,
         connectionString, parseMachines, buildBoard, sortHosts, reachOf, compareVersions, notable,
-        coverageOf, coverageSummary,
+        coverageOf, coverageSummary, checksCoverage, buildTasks,
     };
     if (typeof module === "object" && module.exports) module.exports = api;
     else root.StatusBoard = api;

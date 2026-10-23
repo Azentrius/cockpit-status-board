@@ -9,8 +9,8 @@ permissions:
 
 jobs:
   # Everything that runs without a server: lint, the offline tests, the archive and the packages
-  # (each built twice to the same bytes), the packages installed on Debian and Fedora, and the
-  # page in a browser against a stand-in for Cockpit.
+  # (each built twice to the same bytes), the packages installed on Debian and Fedora (on Rocky
+  # Linux and AlmaLinux: job install), and the page in a browser against a stand-in for Cockpit.
   test:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -77,8 +77,19 @@ jobs:
             test -f /usr/share/cockpit/status-board/manifest.json
             dnf remove -y -q cockpit-status-board
             test ! -e /usr/share/cockpit/status-board'
-      - name: Browser (Playwright, pinned in test/requirements.txt)
-        run: python -m playwright install --with-deps chromium
+      # Only the browser, from Playwright's CDN (seconds). Its system packages (--with-deps: fonts,
+      # xvfb) come by apt from the Ubuntu mirror, which once took twelve minutes for them and cut a
+      # job off at its time limit (Azentrius/cockpit-cronjobs#85). The runner image brings what
+      # Chromium needs (it has Google Chrome); the browser tests show if anything is missing. Each
+      # try gets four minutes, a hung one a second try.
+      - name: Browser (Chromium from Playwright's CDN, two tries)
+        timeout-minutes: 10
+        run: |
+          for try in 1 2; do
+            timeout --kill-after=10s 4m python -m playwright install chromium && exit 0
+            echo "::warning::playwright install failed or hung (try $try)"
+          done
+          exit 1
       # test/ui_test.py against test/web/mock-cockpit.js, served with Cockpit's CSP: the board of
       # the fixtures' hosts, hostile and broken answers, hosts that cannot be reached, a locked
       # key, a timeout, the reload every 5 minutes, English and German, dark, a phone.
@@ -90,6 +101,44 @@ jobs:
         with:
           name: screenshots
           path: test/shots/
+
+  # The .rpm on the RHEL rebuilds Rocky Linux and AlmaLinux, 9 and 10, beyond the test job's
+  # Debian 13 and Fedora 43: installed with the distribution's own Cockpit (its version is
+  # printed), the files as the package database has them, the removal. No Cockpit runs there, so
+  # an installed package is not yet a tested system.
+  install:
+    name: install (${{ matrix.image }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["rockylinux/rockylinux:9", "rockylinux/rockylinux:10", "almalinux:9", "almalinux:10"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Packages
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends rpm > /dev/null
+          make packages
+      - name: Install, check and remove on ${{ matrix.image }}
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          docker run --rm -v "$PWD/dist:/dist:ro" "$IMAGE" sh -ec '
+            . /etc/os-release
+            echo "$PRETTY_NAME"
+            dnf install -y -q /dist/*.rpm
+            rpm -q cockpit-bridge
+            rpm -V cockpit-status-board
+            test -f /usr/share/cockpit/status-board/manifest.json
+            test -f /usr/share/cockpit/status-board/lib/status.js
+            test -f /usr/share/metainfo/de.azentrius.status_board.metainfo.xml
+            rpm -ql cockpit-status-board | grep -qx /usr/share/doc/cockpit-status-board/CC-BY-4.0-Font-Awesome.txt
+            dnf remove -y -q cockpit-status-board
+            test ! -e /usr/share/cockpit/status-board'
 
   # The board against a real Cockpit on the runner's throwaway VM, for what the stand-in can only
   # imitate: the host switcher's list from the bridge, the bridge's channels to other hosts over
@@ -119,10 +168,17 @@ jobs:
           sudo install -m 644 test/e2e/addon/manifest.json test/e2e/addon/index.html test/e2e/addon/probe.js /usr/share/cockpit/e2e/
           sudo install -m 755 test/e2e/addon/status /usr/lib/cockpit-e2e/status
           /usr/lib/cockpit-e2e/status status --lang en | python -m json.tool
-      - name: Check tools (pinned in test/requirements.txt) and the browser
+      - name: Check tools (pinned in test/requirements.txt)
+        run: pip install -r test/requirements.txt
+      # Only the browser, two tries of four minutes (see the job test).
+      - name: Browser (Chromium from Playwright's CDN, two tries)
+        timeout-minutes: 10
         run: |
-          pip install -r test/requirements.txt
-          python -m playwright install --with-deps chromium
+          for try in 1 2; do
+            timeout --kill-after=10s 4m python -m playwright install chromium && exit 0
+            echo "::warning::playwright install failed or hung (try $try)"
+          done
+          exit 1
       # Three names for this machine, as three hosts in the host switcher. The runner's user logs
       # in with a key that is only in the ssh-agent; e2elocked only with the encrypted key
       # ~/.ssh/id_ed25519, which is not in the agent (as after "ssh-add -D" on the bastion).
