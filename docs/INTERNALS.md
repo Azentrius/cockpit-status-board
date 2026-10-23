@@ -111,8 +111,9 @@ How a valid answer becomes a tile (its state, out of date, the key figure) is pa
 
 | Case | Label | Click |
 |---|---|---|
-| a valid answer | the state's word (Unknown, OK, Notice, Warning, Problem) or Out of date | the add-on, at the key item's link |
-| exit 77, or access denied | No access (`none`) | the add-on |
+| a valid answer | the state's word (OK, Notice, Warning, Problem) or Out of date | the add-on, at the key item's link |
+| a valid answer that rates nothing (state `none`, every item `none` or no item) | Not checked (`warning`) | the add-on, at the key item's link |
+| exit 77, or access denied | No access (`warning`) | the add-on |
 | invalid answer, exit 64, other exit codes, missing command, timeout, unreadable manifest | Status unreadable (`warning`), with the reason | the add-on |
 | a status command outside `/usr/lib/cockpit-` | Command refused (`warning`) | the add-on |
 | installed in a version without `azentrius.status` | No status (`none`) | the add-on |
@@ -150,9 +151,23 @@ it is open (a hidden button would still be a control on a phone), and open tiles
 board loads again (`state.open`, by `data-key`; not kept across page loads).
 
 **Only what needs attention** (`notable()` in `lib/status.js`): the switch leaves out tiles whose
-state is below Notice (OK, Unknown, Not installed, No status, No access), and keeps tiles that are
-still loading. A row's label still says the whole row; a row left without tiles says "Nothing that
-needs attention". The browser keeps the switch in `localStorage`; without storage it starts off.
+state is below Notice (OK, Unknown, Not installed, No status), and keeps tiles that are still
+loading. A row's label still says the whole row; a row left without tiles says "Nothing that needs
+attention". The browser keeps the switch in `localStorage`; without storage it starts off. Up to
+0.2.3 No access was left out too, and an answer that rated nothing showed as Unknown: with the
+switch on, an add-on the board knew nothing about disappeared.
+
+**Coverage** (`coverageOf()` and `coverageSummary()` in `lib/status.js`): every tile of an
+installed add-on with a status entry counts. It is checked when its answer is valid, in time and
+rates something; otherwise its coverage is `unchecked` (rates nothing), `stale`, `noaccess` or
+`unreadable` (Status unreadable, Command refused). Not installed and No status are no gap: nothing
+says the add-on is expected there. Above the hosts (`#coverage`, outside the switch) the board says
+how many add-ons are checked, each gap with its count as a warning, and how many hosts could not be
+read at all (Unreachable, Key locked, Add-ons unreadable; with the worst of their labels); "Complete"
+when nothing is missing once loading is done. Below each host's name a line says the same for that
+host and names the add-ons with a gap. A single item in state `none` is no gap: Cron Jobs uses it
+for jobs without recording and Image Update Monitor for no pending roll-out, so version 1 of
+the contract cannot tell "nothing to rate" from "could not check".
 
 **Versions.** A tile names the add-on's version in its facts. `buildBoard()` compares the versions
 of the same add-on on all hosts (`compareVersions()`: three numbers, a suffix such as `~dev…` or

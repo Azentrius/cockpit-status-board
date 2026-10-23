@@ -34,6 +34,18 @@
         colDetail: "Details",
         version: v => `Version ${v}`,
         newerElsewhere: v => `Auf anderen Hosts läuft Version ${v}`,
+        coverage: "Abdeckung",
+        coverageCount: (n, total) => `${n} von ${total} Add-ons geprüft`,
+        coverageGap: (n, word) => `${n} ${word}`,
+        coverageHosts: n => (n === 1 ? "1 Host nicht gelesen" : `${n} Hosts nicht gelesen`),
+        coverageComplete: "Vollständig",
+        hostCoverage: (n, total) => `${n} von ${total} Add-ons geprüft`,
+        coverageWords: {
+            unchecked: "nichts geprüft",
+            stale: "veraltet",
+            noaccess: "kein Zugriff",
+            unreadable: "Status nicht lesbar",
+        },
 
         words: {
             none: "Unbekannt",
@@ -42,6 +54,7 @@
             warning: "Achtung",
             danger: "Problem",
             stale: "Veraltet",
+            unchecked: "Nicht geprüft",
             missing: "Nicht installiert",
             nostatus: "Kein Status",
             noaccess: "Kein Zugriff",
@@ -54,7 +67,7 @@
 
         missingText: "Auf anderen Hosts installiert.",
         nostatusText: "Diese Version des Add-ons meldet keinen Status.",
-        noaccessText: "Ohne Administratorzugriff auf diesem Host hat das Add-on nichts zu melden.",
+        noaccessText: "Ohne Administratorzugriff ist hier nichts lesbar. Meist hat das Add-on noch nicht geprüft, oder seine regelmäßige Prüfung ist nicht eingerichtet.",
         rejectedText: "Sein Manifest nennt einen Status-Befehl außerhalb von `/usr/lib/cockpit-…`. Das Board führt ihn nicht aus.",
         lockedText: "Ihr SSH-Schlüssel ist gesperrt. Melden Sie sich einmal im Host-Umschalter an diesem Host an, um ihn zu entsperren.",
         lockedTextNoSwitcher: "Ihr SSH-Schlüssel ist gesperrt. Melden Sie sich neu bei Cockpit an oder entsperren Sie ihn im Terminal von Cockpit mit `ssh-add`.",

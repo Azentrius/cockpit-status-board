@@ -202,8 +202,8 @@ with sync_playwright() as p:
     check(tile_label(page, "localhost/update-gaps") == [LABEL["none"], "Nicht installiert", True] and
           page.evaluate("""() => document.querySelector('[data-key="localhost/update-gaps"]').tagName""") == "DIV",
           "not installed: neutral and not a button")
-    check(tile_label(page, "build-host/cronjobs") == [LABEL["none"], "Kein Zugriff", True] and "Ohne Administratorzugriff" in tile_text(page, "build-host/cronjobs"),
-          "exit 77: no access")
+    check(tile_label(page, "build-host/cronjobs") == [LABEL["warning"], "Kein Zugriff", True] and "Ohne Administratorzugriff" in tile_text(page, "build-host/cronjobs"),
+          "exit 77: no access, a warning (nothing of the add-on can be read)")
     t = tile_text(page, "build-host/image-updates")
     check(tile_label(page, "build-host/image-updates") == [LABEL["warning"], "Veraltet", True] and "veraltet seit 18. Okt., 19:12" in t
           and "Stand vor 38 Stunden" in t, "out of date: a warning with since when: " + t)
@@ -224,6 +224,22 @@ with sync_playwright() as p:
           and "Host-Umschalter" in t, "a locked SSH key: " + t)
     check(host_label(page, "locked-host") == [LABEL["warning"] + " az-label--strong", "Schlüssel gesperrt"],
           "and so does a locked key: " + repr(host_label(page, "locked-host")))
+
+    # coverage: of the board above the hosts, of each host below its name
+    cov = page.evaluate("""() => { const c = document.querySelector('#coverage');
+        return { hidden: c.hidden, place: c.previousElementSibling.id + '|' + c.nextElementSibling.id,
+                 title: c.querySelector('h2').innerText, figure: c.querySelector('.sb-coverage__figure').innerText,
+                 labels: Array.from(c.querySelectorAll('.az-label')).map(l => [l.className, l.innerText.trim()]) }; }""")
+    check(cov == {"hidden": False, "place": "alerts|board", "title": "Abdeckung", "figure": "6 von 9 Add-ons geprüft",
+                  "labels": [[LABEL["warning"], "1 Status nicht lesbar"], [LABEL["warning"], "1 kein Zugriff"], [LABEL["warning"], "1 veraltet"],
+                             [LABEL["danger"], "2 Hosts nicht gelesen"]]},
+          "the board's coverage: add-ons checked, what keeps the others from it, hosts not read: " + repr(cov))
+    lines = dict(page.evaluate("""() => Array.from(document.querySelectorAll('.sb-host')).map(s =>
+        [s.dataset.host, (s.querySelector('.sb-host__header + .sb-host__coverage') || {}).innerText || null])"""))
+    check(lines == {"localhost": "2 von 2 Add-ons geprüft", "public-host": "3 von 3 Add-ons geprüft",
+                    "build-host": "0 von 2 Add-ons geprüft · Cron Jobs: kein Zugriff · Image Update Monitor: veraltet",
+                    "claw-host": "1 von 2 Add-ons geprüft · Update Gaps: Status nicht lesbar", "locked-host": None, "old-host": None},
+          "each host's coverage below its name; not installed and no status entry are no gap; none for hosts not read: " + repr(lines))
     shot(page, "board")
     no_problems(page, "board")
 
@@ -443,6 +459,8 @@ with sync_playwright() as p:
     quiet = page.evaluate("""() => { const s = document.querySelector('[data-host="quiet-host"]');
         return [s.querySelector('h2').innerText, s.querySelectorAll('.sb-tile, .sb-note').length]; }""")
     check(quiet == ["quiet-host", 0], "a host that answers, without a note of its own: " + repr(quiet))
+    check(page.evaluate("() => [document.querySelector('#coverage').hidden, document.querySelectorAll('.sb-host__coverage').length]") == [True, 0],
+          "no coverage while no host has an add-on with a status")
     check(tile_label(page, "old-host/unreachable")[1] == "Nicht erreichbar", "a host that does not answer")
     no_problems(page, "empty")
     page.context.close()
@@ -451,7 +469,8 @@ with sync_playwright() as p:
     page = open_page(browser, "lang=en")
     text = page.inner_text("body")
     check(not re.search(r"[äöüÄÖÜß„“]|\b(Nicht|Stand|Achtung|Hinweis|dieser|Verbindung)\b", text), "the English board has no German")
-    for word in ("Not installed", "Unreachable", "Key locked", "Out of date", "No access", "No status", "Status unreadable", "Refresh", "this host"):
+    for word in ("Not installed", "Unreachable", "Key locked", "Out of date", "No access", "No status", "Status unreadable", "Refresh", "this host",
+                 "Coverage", "6 of 9 add-ons checked", "2 hosts not read", "0 of 2 add-ons checked · Cron Jobs: no access · Image Update Monitor: out of date"):
         check(word in text, "English: " + word)
     check(all(c["args"][3] == "en" for c in calls(page, "spawn") if c["args"][1:3] == ["status", "--lang"]), "the status verb in English")
     check(page.inner_text("#meta") == "Loaded at 21:00 · 6 hosts", "English header: " + page.inner_text("#meta"))
@@ -580,6 +599,13 @@ with sync_playwright() as p:
     hidden = ["localhost/cronjobs", "build-host/cronjobs", "claw-host/cronjobs", "claw-host/image-updates"]
     check(page.is_checked("#only-notable") and len(keys) == 12 and not any(k in keys for k in hidden),
           "the switch leaves out what needs no attention: " + repr(keys))
+    cov = page.evaluate("""() => [document.querySelector('#coverage').hidden, document.querySelector('#coverage .sb-coverage__figure').innerText,
+        Array.from(document.querySelectorAll('#coverage .az-label')).map(l => l.innerText.trim()),
+        Array.from(document.querySelectorAll('.sb-host__coverage')).map(p => p.innerText)]""")
+    check(cov == [False, "14 of 15 add-ons checked", ["1 out of date"],
+                  ["4 of 4 add-ons checked", "3 of 4 add-ons checked · Image Update Monitor: out of date", "3 of 3 add-ons checked",
+                   "4 of 4 add-ons checked"]],
+          "the coverage stays with the switch, of the board and of every host: " + repr(cov))
     check(host_label(page, "claw-host") == [LABEL["danger"] + " az-label--strong", "Problem"], "the row's label still says the whole row")
     check(len(entries(key)) == 5, "an open tile stays open with the switch")
     shot(page, "readme-board-details")

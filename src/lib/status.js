@@ -350,8 +350,49 @@
     }
 
     /* Whether a tile needs attention: a notice, a warning or a problem (out of date included), or
-       a host still loading. OK, Unknown, Not installed, No status and No access do not. */
+       a host still loading. OK, Unknown, Not installed and No status do not. No access and an
+       answer that rates nothing are warnings (gaps in what the board knows), so they do. */
     const notable = tile => tile.kind === "loading" || rank(tile.state) >= RANK.info;
+
+    /* What the board knows about an add-on on a host (its coverage), from its tile:
+         checked     a valid answer that rates something, in time
+         unchecked   a valid answer that rates nothing (every item none, or none at all)
+         stale       a valid answer out of date
+         noaccess    nothing readable without administrative access (exit 77)
+         unreadable  no usable answer (Status unreadable, Command refused)
+       null for a tile that is no installed add-on with a status entry (Not installed, No status)
+       and for a host that cannot be read: no check of an add-on is missing there.
+       A single item in state none is no gap: add-ons use none for "nothing to rate" as well (Cron
+       Jobs' jobs without recording, Image Update Monitor's rollout), so contract version 1 cannot
+       tell it from "could not check". */
+    function coverageOf(tile) {
+        switch (tile.kind) {
+        case "status": return tile.word === "unchecked" ? "unchecked" : tile.eval.staleSince !== null ? "stale" : "checked";
+        case "noaccess": return "noaccess";
+        case "error":
+        case "rejected": return "unreadable";
+        default: return null;
+        }
+    }
+
+    /* The coverage of the whole board: how many add-ons with a status entry the hosts that could be
+       read have (total), how many of them answered in time with something rated (checked), the
+       others by coverage (gaps), and how many hosts could not be read at all (unread: unreachable,
+       locked key, find failed; hosts still loading do not count). */
+    function coverageSummary(rows) {
+        const out = { total: 0, checked: 0, gaps: { unchecked: 0, stale: 0, noaccess: 0, unreadable: 0 }, unread: 0, unreadState: "none" };
+        rows.forEach(row => row.tiles.forEach(t => {
+            if (t.kind === "unreachable" || t.kind === "locked" || t.kind === "discovery") {
+                out.unread++;
+                out.unreadState = worse(out.unreadState, t.state);
+            } else if (t.coverage) {
+                out.total++;
+                if (t.coverage === "checked") out.checked++;
+                else out.gaps[t.coverage]++;
+            }
+        }));
+        return out;
+    }
 
     const byName = (a, b) => a.sortLabel.localeCompare(b.sortLabel, "en", { sensitivity: "base" }) || (a.pkg < b.pkg ? -1 : a.pkg > b.pkg ? 1 : 0);
 
@@ -361,10 +402,13 @@
         switch (result.kind) {
         case "ok": {
             const ev = evaluate(result.status, now);
+            /* An answer that rates nothing has checked nothing yet: a gap, not Unknown. */
+            if (ev.state === "none") return Object.assign(tile, { kind: "status", state: "warning", word: "unchecked", status: result.status, eval: ev });
             return Object.assign(tile, { kind: "status", state: ev.state, word: ev.byAge ? "stale" : ev.state, status: result.status, eval: ev });
         }
         case "noaccess":
-            return Object.assign(tile, { kind: "noaccess", state: "none", word: "noaccess" });
+            /* Nothing is readable without root: usually the add-on has not checked yet. */
+            return Object.assign(tile, { kind: "noaccess", state: "warning", word: "noaccess" });
         case "rejected":
             return Object.assign(tile, { kind: "rejected", state: "warning", word: "rejected" });
         default:
@@ -381,9 +425,11 @@
                   { reach: "locked", identity }               (the SSH key in the agent is locked)
                   { reach: "ok", discovery: "failed", message }
                   { reach: "ok", discovery: "ok", packages: packagesOf(…), results: { pkg: result } }
-       Returns [{ host, state, tiles }]. An add-on with a status entry on one host gets a tile
-       on every host it could be read from: "missing" where the package is not installed,
-       "nostatus" where it is, in a version without the status entry.
+       Returns [{ host, state, tiles, coverage }]: every tile carries its coverage (coverageOf()),
+       the row's coverage is { total, checked, gaps: [{ pkg, label, coverage }] } or null.
+       An add-on with a status entry on one host gets a tile on every host it could be read
+       from: "missing" where the package is not installed, "nostatus" where it is, in a version
+       without the status entry.
        Names: a tile carries the label its own host sends (else the one of its manifest), so a
        host can name only its own tiles. Tiles are sorted, and "missing" tiles named, by the label
        of the first host that has one, this host first.
@@ -431,7 +477,15 @@
                 }).sort(byName);
             }
             const state = tiles.reduce((s, t) => worse(s, t.state), "none");
-            return { host, state, tiles };
+            tiles.forEach(t => { t.coverage = coverageOf(t); });
+            const covered = tiles.filter(t => t.coverage);
+            /* null where no add-on with a status entry could be read (the host's tile says why) */
+            const coverage = covered.length ? {
+                total: covered.length,
+                checked: covered.filter(t => t.coverage === "checked").length,
+                gaps: covered.filter(t => t.coverage !== "checked").map(t => ({ pkg: t.pkg, label: t.label, coverage: t.coverage })),
+            } : null;
+            return { host, state, tiles, coverage };
         });
 
         const versioned = [].concat(...rows.map(row => row.tiles))
@@ -474,6 +528,7 @@
         validateStatus, stateOfItems, evaluate, classifyFailure, outputCollector,
         packageOfManifestPath, statusEntry, menuLabel, statusArgv, packagesOf,
         connectionString, parseMachines, buildBoard, sortHosts, reachOf, compareVersions, notable,
+        coverageOf, coverageSummary,
     };
     if (typeof module === "object" && module.exports) module.exports = api;
     else root.StatusBoard = api;

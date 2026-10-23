@@ -42,14 +42,20 @@ and changes nothing on any host; a click on a tile opens the add-on on its host.
   reason), a locked SSH key ("Key locked"), an add-on without administrative access ("No access"),
   in a version without the status contract ("No status") or with an answer the board cannot use
   ("Status unreadable", with the reason). Data older than the add-on allows (`stale_after`) makes
-  the tile a warning, "out of date since …".
+  the tile a warning, "out of date since …". "No access" and an answer that rates nothing ("Not
+  checked") are warnings too: the board knows nothing about that add-on there.
+- **Coverage:** above the hosts, how many add-ons answered in time with something rated ("6 of 9
+  add-ons checked"), what keeps the others from it and how many hosts could not be read; below
+  each host's name the same for that host ("2 of 3 add-ons checked · Cron Jobs: no access"). Not
+  installed and No status are no gap there. A single entry in state Unknown is no gap either, since
+  add-ons use it for "nothing to rate" as well.
 - **Every entry of a tile:** "All 5 entries" opens what the add-on reports in a panel below the
   row, a table with each entry's name, value, label and detail. An entry with a place in the
   add-on opens it on a click (the Security Monitor's SSH, for example), not only the key figure's.
   The tiles of the row stay as they are, and open tiles stay open when the board loads again.
 - **Only what needs attention:** a switch in the header leaves out the tiles in OK, Unknown, Not
-  installed, No status and No access; a host left without tiles says "Nothing that needs
-  attention". The browser keeps the choice.
+  installed and No status; a host left without tiles says "Nothing that needs attention". The
+  coverage stays. The browser keeps the choice.
 - **Versions:** each tile names the add-on's version and says so when another host runs a newer
   one ("Version 0.2.0 runs on other hosts"), so a forgotten update shows.
 - **Current without you:** it loads on opening, on Refresh and every 5 minutes while the page is

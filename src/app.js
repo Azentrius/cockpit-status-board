@@ -18,7 +18,8 @@
  *
  * A tile folds out every entry of its answer, each opening its own place in the add-on; a switch
  * shows only what needs attention (kept in the browser), and a tile says when the same add-on runs
- * in a newer version on another host.
+ * in a newer version on another host. Above the hosts and below each host's name the page says how
+ * many add-ons answered in time with something rated (coverage), whatever the switch.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -343,6 +344,31 @@
         }));
     }
 
+    /* The coverage of the board, above the hosts and outside the switch: how many add-ons answered
+       in time with something rated, what keeps the others from it, and how many hosts could not be
+       read. Hidden while no host has an add-on with a status (the empty state says so). */
+    function renderCoverage(rows, nothing) {
+        const c = SB.coverageSummary(rows);
+        const box = $("coverage");
+        box.hidden = nothing || (c.total === 0 && c.unread === 0);
+        if (box.hidden) {
+            box.replaceChildren();
+            return;
+        }
+        const gaps = ["unreadable", "noaccess", "unchecked", "stale"].filter(k => c.gaps[k])
+            .map(k => label("warning", T.coverageGap(c.gaps[k], T.coverageWords[k])));
+        fill(box,
+            h("h2", { class: "sb-coverage__title", id: "coverage-title" }, T.coverage),
+            h("span", { class: "sb-coverage__figure" }, T.coverageCount(c.checked, c.total)),
+            gaps,
+            c.unread ? label(c.unreadState, T.coverageHosts(c.unread)) : null,
+            !state.loading && !gaps.length && !c.unread ? label("ok", T.coverageComplete) : null);
+    }
+
+    /* A host's coverage below its name: "2 of 3 add-ons checked · Cron Jobs: no access". */
+    const coverageLine = c => [T.hostCoverage(c.checked, c.total)]
+        .concat(c.gaps.map(g => g.label + ": " + T.coverageWords[g.coverage])).join(" · ");
+
     function errorText(e) {
         switch (e.kind) {
         case "invalid": {
@@ -498,7 +524,7 @@
 
     /* quiet: no note for a row without tiles (the empty state above says it for all rows).
        The label always says the whole row; with "only what needs attention" the tiles that do not
-       are left out, and a row left without any says so. */
+       are left out, and a row left without any says so. The coverage line stays either way. */
     function renderRow(row, index, quiet, nextId) {
         const host = row.host;
         const id = "host-" + index;
@@ -510,6 +536,7 @@
                 h("h2", { class: "sb-host__title", id }, host.label),
                 sub ? h("span", { class: "az-meta" }, sub) : null,
                 rowLabel(row)),
+            row.coverage ? h("p", { class: "sb-host__coverage" }, coverageLine(row.coverage)) : null,
             tiles.length ? h("div", { class: "sb-tiles" }, tiles.map(t => renderTile(host, t, nextId())))
                 : quiet ? null : h("p", { class: "sb-note" }, note));
     }
@@ -528,6 +555,7 @@
         /* No add-on with a status anywhere (yet): say so once, and still show the hosts, so that
            it shows which of them answer. */
         const nothing = rows.length > 0 && rows.every(r => r.tiles.every(t => !t.pkg && t.kind !== "loading"));
+        renderCoverage(rows, nothing);
         fill(board,
             nothing ? h("section", { class: "az-card" }, h("div", { class: "az-empty" },
                 h("span", { class: "az-empty__icon" }, icon("info-circle")),
