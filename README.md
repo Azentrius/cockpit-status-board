@@ -108,8 +108,8 @@ tested system by itself.
 | **Tested** | Chromium, against a stand-in for Cockpit with Cockpit's CSP | the page with good, broken and hostile answers and the add-ons' real ones, unreachable hosts, a locked key, a timeout, the reload every 5 minutes, English and German, dark, a phone (job `test`, `test/ui_test.py`) |
 | **Tested by hand** | a bastion with Cockpit 360 and three hosts behind it (Cockpit 360 and 362, Ubuntu 24.04 and 26.04), 2026-10-20 | the seven steps of [Trying it on the bastion](#trying-it-on-the-bastion) |
 | **Recorded** | Cron Jobs 2.9.0, Image Update Monitor 0.24.1, Update Gaps 0.6.0, Security Monitor 0.2.0 | their status answers in English and German (`test/fixtures/status/real-*.json`), read by the offline and the browser tests |
-| **Package installs** | Debian 13 (`.deb`), Fedora 43 (`.rpm`) | the package installs and removes cleanly (job `test`); no Cockpit runs there |
-| **Expected, untested** | other versions of Debian, Ubuntu and Fedora, RHEL and openSUSE, with a Cockpit as current as the tested ones | the board in a real Cockpit there; the packages on Ubuntu, RHEL and openSUSE |
+| **Package installs** | Debian 13 (`.deb`), Fedora 43 (`.rpm`) (job `test`); Rocky Linux and AlmaLinux 9 and 10 (`.rpm`, for RHEL 9 and 10; job `install`) | the package installs with the distribution's own Cockpit and removes cleanly; no Cockpit runs there |
+| **Expected, untested** | other versions of Debian, Ubuntu and Fedora, RHEL and openSUSE, with a Cockpit as current as the tested ones | the board in a real Cockpit there; the packages on Ubuntu, RHEL itself and openSUSE |
 
 ## Install, update, uninstall
 
@@ -129,8 +129,9 @@ sudo rpm --import https://packages.azentrius.com/azentrius.asc
 sudo dnf install https://packages.azentrius.com/azentrius-repository.rpm
 ```
 
-RHEL and its derivatives use the same `dnf` set-up, but it is tested on Fedora only. The repository
-has no set-up for openSUSE: there, install the `.rpm` of a release (below).
+RHEL and its derivatives use the same `dnf` set-up; it is tested on Fedora and on Rocky Linux and
+AlmaLinux 9 and 10, not on RHEL itself. The repository has no set-up for openSUSE: there, install
+the `.rpm` of a release (below).
 
 Then install **Status Board** in Cockpit under **Applications** (with administrative access), or on
 the console with `sudo apt install cockpit-status-board` or `sudo dnf install cockpit-status-board`.
@@ -154,7 +155,8 @@ sudo zypper install --allow-unsigned-rpm ./cockpit-status-board-X.Y.Z-1.noarch.r
 The `.rpm` of a release carries no package signature (the repository signs its own copy): `zypper`
 needs `--allow-unsigned-rpm`, and the two checks above take the place of the signature. To update,
 do the same with the files of the newer release. The tests install the `.deb` on Debian 13 and the
-`.rpm` on Fedora 43; installing the packages on Ubuntu, RHEL or openSUSE is untested.
+`.rpm` on Fedora 43 and on Rocky Linux and AlmaLinux 9 and 10; installing the packages on Ubuntu,
+RHEL itself or openSUSE is untested.
 
 On other systems the archive `cockpit-status-board-X.Y.Z.tar.gz` of a release holds the page:
 `sudo tar -xzf cockpit-status-board-X.Y.Z.tar.gz -C /usr/share/cockpit`.
