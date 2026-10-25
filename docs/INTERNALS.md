@@ -127,15 +127,17 @@ shows only on the hosts tab.
 |---|---|---|
 | finding | an open finding of `item.findings`: not accepted, or its `accepted_until` has passed | the finding's, from Notice up |
 | item | an item from Notice up that no finding shows (the add-on sends no findings, or none of its findings is open or accepted); marked "summary only" when the add-on sends no optional part at all | the item's own |
-| coverage | a gap in the coverage of an add-on of a host that could be read (below) | Warning |
+| coverage | a gap in the coverage of an add-on of a host that could be read (below), an expected add-on that is missing included | Warning for an add-on the host is expected to have; for one it is not expected to have as the table "Coverage" below says (Notice, Warning, or no task) |
+| profile | a host that could be read and sends no target profile, while the board has tiles | Notice |
 | host | a host that cannot be read: Unreachable, Key locked, Add-ons unreadable | its tile's |
 
 An item's state is its own: data out of date is a gap of its add-on's coverage, one task, not a
 task for each item. A single item in state `none` is no task. Accepted findings are no tasks; they
 are listed in a folded section **Accepted** (finding, host, add-on, until, soonest end first), and
 the checks in state `notapplicable` in a folded section **Not applicable** (check, host, add-on,
-reason). Accepted is never resolved: the finding comes back as a task on the day its acceptance
-ends. A fold shows only when it has something; open folds stay open when the board loads again.
+reason, set by: the add-on itself, or the host's target profile with the day its skip ends).
+Accepted is never resolved: the finding comes back as a task on the day its acceptance ends. A
+fold shows only when it has something; open folds stay open when the board loads again.
 
 **Order**, without a score: the state (Problem, Warning, Notice); then a host that cannot be read,
 because it hides everything else on it; then exposure (`internet`, `restricted`, `internal`,
@@ -145,16 +147,20 @@ decides only where all steps before it are equal. A finding whose `since` lies l
 is marked "new"; that is a mark, not a step of the order.
 
 **Each task** shows its state's label, its title (the finding's; the item's with its value; the gap
-as in the host's coverage line; the host's problem), the host and the add-on (for a finding also
+as in the host's coverage line, "Update Gaps is missing" for an expected add-on that is not
+installed; the host's problem; "No target profile"), the host and the add-on (for a finding also
 its item), its reasons as neutral chips ("reachable from the internet", "reachable from some
-addresses", "known to be exploited", "fix available", "summary only", "findings unknown"), what the
+addresses", "known to be exploited", "fix available", "summary only", "findings unknown", and for a
+gap of a host with a target profile "expected for role web" or "not expected here"), what the
 add-on or the page says about it, and three facts: since when, the evidence ("Checked 20:50,
 complete": the time of the check that owns the item, else the item's, else the answer's; complete
 or partial only where a check owns the item, from `findings.complete` for a finding), and what
 resolves it. Its button opens the add-on on its host through `jumpTo()`, with the same checks as a
 tile: at the finding's link, else its item's; at the item's link; at the gap check's link, else the
-link of its item; for a gap without checks at the key item's link; for a host its Overview. Without
-the host switcher the tasks of other hosts have no button, as their tiles are no buttons.
+link of its item; for a gap without checks at the key item's link; for a host its Overview; for
+"No target profile" the start of the host's Host Settings, where it is installed. A missing add-on
+has nothing to open. Without the host switcher the tasks of other hosts have no button, as their
+tiles are no buttons.
 
 Nothing to do says so ("Nothing needs attention", and that OK means the add-ons found nothing in
 what they check, not that the hosts are safe); while hosts are still loading the tab says that
@@ -172,11 +178,16 @@ How a valid answer becomes a tile (its state, out of date, the key figure) is pa
 | exit 77, or access denied | No access (`warning`) | the add-on |
 | invalid answer, exit 64, other exit codes, missing command, timeout, unreadable manifest | Status unreadable (`warning`), with the reason | the add-on |
 | a status command outside `/usr/lib/cockpit-` | Command refused (`warning`) | the add-on |
-| installed in a version without `azentrius.status` | No status (`none`) | the add-on |
+| installed in a version without `azentrius.status` | No status (`none`; `warning` where the host's target profile expects the add-on) | the add-on |
 | not installed here, but on another host | Not installed (`none`) | nothing |
+| not installed here, and the host's target profile expects it | Missing (`warning`), "Not installed on this host, although its profile expects it." | nothing |
 | the host cannot be reached | Unreachable (`danger`), with Cockpit's reason | the host's Overview |
 | the SSH key is locked | Key locked (`warning`) | the host's Overview |
 | `find` failed | Add-ons unreadable (`warning`) | nothing |
+
+An add-on the host's target profile does not expect keeps these labels, except that No access and
+Not checked are not rated there (`none`): they are no gap of what the host should have. An expected
+add-on that no host reports gets a Missing tile in that host's row only, named by its package.
 
 The tiles of a row are sorted by name, the same on every host, so the columns line up. A tile is
 named by the label its own host sends (else its manifest's menu label); the name used for sorting
@@ -207,30 +218,70 @@ it is open (a hidden button would still be a control on a phone), and open tiles
 board loads again (`state.open`, by `data-key`; not kept across page loads).
 
 **Only what needs attention** (`notable()` in `lib/status.js`, on the tab Hosts and coverage): the
-switch leaves out tiles whose state is below Notice (OK, Unknown, Not installed, No status), and
-keeps tiles that are still loading. A row's label still says the whole row; a row left without tiles says "Nothing that needs
+switch leaves out tiles whose state is below Notice (OK, Unknown, Not installed, No status, and the
+unrated tiles of add-ons a host is not expected to have), and keeps tiles that are still loading
+and expected add-ons that are missing. A row's label still says the whole row; a row left without tiles says "Nothing that needs
 attention". The browser keeps the switch in `localStorage`; without storage it starts off. Up to
 0.2.3 No access was left out too, and an answer that rated nothing showed as Unknown: with the
 switch on, an add-on the board knew nothing about disappeared.
 
-**Coverage** (`coverageOf()` and `coverageSummary()` in `lib/status.js`): every tile of an
-installed add-on with a status entry counts. An answer without `checks` is checked when it is
-valid, in time and rates something; otherwise its coverage is `unchecked` (rates nothing), `stale`,
-`noaccess` or `unreadable` (Status unreadable, Command refused). An answer with `checks` takes the
-worst of its checks that apply (`checksCoverage()`; `notapplicable` does not count), from better to
-worse `checked`, `partial`, `stale` (a `checked` or `partial` check past its `checked_at +
-stale_after`), `unsupported`, `failed`, `unconfigured`, `noaccess`; the tile keeps that check as
-`gapCheck` and every check with a gap as `gapChecks`. When no check applies, the items decide as
-without checks. Not installed and No status are no gap: nothing says the add-on is expected there
-(Host Settings' profile is not read yet). Above both tabs (`#coverage`, outside the switch) the
-board says how many add-ons are checked, each gap with its count as a warning, and how many hosts
-could not be read at all (Unreachable, Key locked, Add-ons unreadable; with the worst of their
-labels); "Complete" when nothing is missing once loading is done. Below each host's name a line
-says the same for that host and names the add-ons with a gap, and the check where a check shows it
-("Security Monitor: Container hardening partly checked"). A single item in state `none` is no
-gap: Cron Jobs uses it for jobs without recording and Image Update Monitor for no pending roll-out,
-so version 1 of the contract cannot tell "nothing to rate" from "could not check"; only a check in
-state `partial` says that.
+**Expectation** (`expectationOf()` in `lib/status.js`, used by `buildBoard()`): what a host is
+expected to have comes from its target profile, which only its own Host Settings sends
+(`profile` in its status answer, read only from `addon: "host-settings"`; see the contract). The
+profile applies to that host's row only; another host's profile, or a `profile` field in another
+add-on's answer, changes nothing there.
+
+- **With a profile** the expected add-ons are the add-ons in `expect`, and the add-on of every
+  check in it (`security/exposure` expects `security`); every check of an expected add-on counts.
+  A skip (`update-gaps/cve`) that has no `until`, or whose `until` lies ahead at the board's clock,
+  makes that check `notapplicable` in that row, with the skip's reason (`byProfile`, `until` on the
+  check; the tile's `status` is then a copy, the add-on's answer stays as it is). On the day of its
+  `until` the check counts again. A check the add-on itself reports as `notapplicable` keeps its
+  own reason; a skip that names an add-on alone leaves out nothing. An expected add-on that no
+  host reports gets a Missing tile in that row only; one installed there without a status entry
+  while no host reports one (the board itself, for the role `bastion`) is not judged.
+- **Without a profile** every installed add-on with a status entry is expected, and none other:
+  as the board counted before it read profiles. The row's `noProfile` is true for a host that
+  could be read while the board has tiles; its line and one Notice task say "No target profile"
+  (never a warning). Host Settings in a version without the profile, or with an answer the board
+  cannot use, counts as no profile.
+
+**Coverage** (`coverageOf()`, `gapRating()` and `coverageSummary()` in `lib/status.js`): every
+tile of an installed add-on with a status entry has a coverage, and so has an expected add-on that
+is missing or installed in a version without the status entry. An answer without `checks` is
+checked when it is valid, in time and rates something; otherwise its coverage is `unchecked`
+(rates nothing), `stale`, `noaccess` or `unreadable` (Status unreadable, Command refused). An answer
+with `checks` takes the worst of its checks that apply (`checksCoverage()`; `notapplicable`, the
+profile's skips included, does not count), from better to worse `checked`, `partial`, `stale` (a
+`checked` or `partial` check past its `checked_at + stale_after`), `unsupported`, `failed`,
+`unconfigured`, `noaccess`; the tile keeps that check as `gapCheck` and every check with a gap as
+`gapChecks`. When no check applies, the items decide as without checks. How a gap counts
+(`tile.gap`) depends on whether the host is expected to have the add-on:
+
+| Coverage | expected | not expected |
+|---|---|---|
+| `checked` | no gap | no gap |
+| `partial`, `stale`, `failed` | Warning | Notice |
+| `unconfigured`, `noaccess`, `unsupported`, `unchecked` | Warning | not rated |
+| `unreadable` | Warning | Warning |
+| `missing` (not installed) | Warning | none: a neutral Not installed tile |
+| `unsupported` from No status (a version without the status entry) | Warning | none: a neutral No status tile |
+| `notapplicable` (from the add-on, or the profile's skip) | does not count | does not count |
+
+With checks, a gap of an add-on that is not expected counts as its most severe check: a partial
+check is a notice even where another check has no access. A gap that counts is a task in that
+state; an unrated one is none. Above both tabs (`#coverage`, outside the switch) the board says how
+many of the expected add-ons are checked ("6 of 9 expected add-ons checked"), each gap of an
+expected add-on with its count as a warning, how many hosts could not be read at all
+(Unreachable, Key locked, Add-ons unreadable; with the worst of their labels), and as a notice how
+many hosts send no target profile; "Complete" when no expected add-on has a gap and every host
+could be read once loading is done. Add-ons a host is not expected to have count in none of these
+figures. Below each host's name a line says the same for that host and names the expected add-ons
+with a gap, and the check where a check shows it ("Security Monitor: Container hardening partly
+checked"), then the profile's roles as neutral chips ("Role web") or the notice "No target
+profile". A single item in state `none` is no gap: Cron Jobs uses it for jobs without recording and
+Image Update Monitor for no pending roll-out, so version 1 of the contract cannot tell "nothing to
+rate" from "could not check"; only a check in state `partial` says that.
 
 **Checks, findings, profile** (the optional parts of the contract): `validateStatus()` reads them
 when `features` names them (`validateExtension()`): `status.features`, `status.checks`,
@@ -238,9 +289,9 @@ when `features` names them (`validateExtension()`): `status.features`, `status.c
 left out. Every list is bounded (50 checks, 100 findings per answer, 10 roles, 100 expectations,
 50 skips), ids are kept in `Set`s and `Map`s, never as keys of plain objects, and a list counts as
 complete only with a `checked` check naming its item. `evaluate()` takes an item's state from
-`itemState()`: never better than its open findings. The coverage uses the checks and the tab Needs
-attention the findings (above); the profile is not used yet. `test/fixtures/status/ext-*.json` are
-the good, broken, hostile and incompatible answers.
+`itemState()`: never better than its open findings. The coverage uses the checks, the tab Needs
+attention the findings, and the expectation the profile (above). `test/fixtures/status/ext-*.json`
+are the good, broken, hostile and incompatible answers.
 
 **Versions.** A tile names the add-on's version in its facts. `buildBoard()` compares the versions
 of the same add-on on all hosts (`compareVersions()`: three numbers, a suffix such as `~dev…` or
