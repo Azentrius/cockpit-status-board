@@ -6,7 +6,7 @@
  * test/serve.py): the manifests, and the output of each add-on's status verb, the German one
  * when there is a .de.json and the page asks with --lang de.
  *
- * Query parameters: scenario=default|real|demo|tasks|demo-tasks|expected|edge|hostile|broken|empty,
+ * Query parameters: scenario=default|real|demo|tasks|demo-tasks|expected|limits|edge|hostile|broken|empty,
  * chunk (characters per streamed chunk), badhosts=1 (the invalid names of the machines fixture stay
  * in the list), delay (ms per answer). demo and demo-tasks are real and tasks with neutral names
  * (NEUTRAL) instead of the recorded ones: the README's screenshots. Tests change window.__mock at
@@ -194,6 +194,21 @@
                     cronjobs: pkg("cronjobs", "good-cronjobs-ok"),
                     "image-updates": pkg("image-updates", "good-image-updates"),
                 }),
+            },
+        }),
+        /* What the suite does not cover yet, and the evidence of an item with findings: this host
+           has the Security Monitor (its list counts one finding and lists none, so its item is a
+           task whose evidence is not complete), Update Gaps and Image Update Monitor, each of
+           which covers a part of an area; plain-host has Cron Jobs only, which covers none. */
+        limits: () => ({
+            machines: { "plain-host": { visible: true } },
+            hosts: {
+                localhost: host("bastion", Object.assign(cockpitPackages(), {
+                    security: pkg("security", "ext-complete-total-1-empty"),
+                    "update-gaps": pkg("update-gaps", "good-update-gaps"),
+                    "image-updates": pkg("image-updates", "good-image-updates"),
+                })),
+                "plain-host": host("plain-host", { system: pkg("system", null), cronjobs: pkg("cronjobs", "good-cronjobs-ok") }),
             },
         }),
         /* Package names that are also names of what every object inherits ("constructor"), and

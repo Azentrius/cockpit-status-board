@@ -59,6 +59,27 @@
         noProfileText: "Ohne Sollprofil gilt jedes installierte Add-on als erwartet; ein fehlendes fällt so nicht auf. Das Sollprofil legen Sie in Host Settings auf jedem Host fest.",
         missingTitle: name => `${name} fehlt`,
         missingExpectedText: "Auf diesem Host nicht installiert, obwohl sein Sollprofil es erwartet.",
+        limitsToggle: n => `${n} Bereiche noch nicht abgedeckt (geplant)`,
+        limitsNote: "Diese Bereiche prüft noch kein Add-on der Suite. Sie zählen weder als geprüft noch als Lücke und erzeugen keine Aufgaben.",
+        limitAreas: {
+            backup: "Nachweis von Sicherung und Wiederherstellung",
+            vulnerabilities: "Alle bekannten Schwachstellen",
+            tls: "Lebenszyklus der TLS-Zertifikate",
+            drift: "Konfigurationsdrift",
+            identity: "Prüfung von Identitäten",
+        },
+        limitGaps: {
+            backup: "Nichts weist suiteweit nach, dass Sicherungen bestehen und eine Wiederherstellung gelingt.",
+            vulnerabilities: "Nicht jedes Paket, Image und jeder Container wird auf bekannte Schwachstellen geprüft.",
+            tls: "Zertifikate, ihr Ablauf und ihre Erneuerung werden nicht geprüft.",
+            drift: "Änderungen gegenüber einer bekannten Konfiguration werden nicht verfolgt.",
+            identity: "Konten, Gruppen und sudo-Rechte werden nicht überprüft.",
+        },
+        limitParts: {
+            backup: "Teilweise: Image Update Monitor bewahrt Datenbank-Dumps und Image-Rollbacks von vor einem Update auf, nur auf diesem Host.",
+            vulnerabilities: "Teilweise: Update Gaps zeigt CVE-Daten für ausgewählte Ubuntu-Pakete (mit seinen Netzdaten).",
+            identity: "Teilweise: Security Monitor zeigt SSH-Schlüssel und die Anmeldungen der letzten 14 Tage.",
+        },
         checkGap: {
             partial: check => `${check} teilweise geprüft`,
             stale: check => `${check} veraltet`,

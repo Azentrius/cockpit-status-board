@@ -557,6 +557,25 @@
         return { roles: profile.roles, addons, checks, skips };
     }
 
+    /* ---------- what the suite does not cover yet ---------- */
+
+    /* The areas that no add-on of the suite covers yet, planned for later versions: a proof of
+       backup and restore over the whole suite, all known vulnerabilities, the lifecycle of TLS
+       certificates, drift of the configuration, and checks of identities. The board names them on
+       every host it could read (row.limits) as planned scope: never a check, never a gap of the
+       coverage, never a task. */
+    const LIMIT_AREAS = ["backup", "vulnerabilities", "tls", "drift", "identity"];
+    /* The add-on that covers a part of an area today, where it is installed: Image Update Monitor's
+       database dumps and image rollbacks from before an update, kept on the host; Update Gaps' CVE
+       data for selected Ubuntu packages (its network data); Security Monitor's SSH keys and logins. */
+    const LIMIT_PARTS = { backup: "image-updates", vulnerabilities: "update-gaps", identity: "security" };
+
+    /* The limits of one host: [{ area, part }] in the order of LIMIT_AREAS, part the package of
+       LIMIT_PARTS when installed(package) says the host has it, else null. */
+    function limitsOf(installed) {
+        return LIMIT_AREAS.map(area => ({ area, part: own(LIMIT_PARTS, area) && installed(LIMIT_PARTS[area]) ? LIMIT_PARTS[area] : null }));
+    }
+
     /* How a gap of the coverage counts (the table "Coverage" in docs/INTERNALS.md): for an add-on
        the host is expected to have always a warning; for one it is not expected to have a notice
        where something ran and is incomplete (partial, stale, failed), a warning where nothing can
@@ -688,12 +707,14 @@
                   { reach: "locked", identity }               (the SSH key in the agent is locked)
                   { reach: "ok", discovery: "failed", message }
                   { reach: "ok", discovery: "ok", packages: packagesOf(…), results: { pkg: result } }
-       Returns [{ host, state, tiles, coverage, profile, noProfile }]: every tile carries its
-       coverage (coverageOf()), whether the host is expected to have the add-on (expected), how a
-       gap counts (gap: gapRating(), or null), and for an answer with checks the check that shows a
-       gap (gapCheck, or null) and every check with a gap (gapChecks, else []); the row's coverage
+       Returns [{ host, state, tiles, coverage, profile, noProfile, limits }]: every tile carries
+       its coverage (coverageOf()), whether the host is expected to have the add-on (expected), how
+       a gap counts (gap: gapRating(), or null), and for an answer with checks the check that shows
+       a gap (gapCheck, or null) and every check with a gap (gapChecks, else []); the row's coverage
        is { total, checked, gaps: [{ pkg, label, coverage, check? }] } over the expected add-ons,
-       or null.
+       or null; limits are the areas the suite does not cover yet (limitsOf(), with the packages
+       installed on that host) for a host that could be read while the board has tiles, else null.
+       They are no tile and count nowhere.
        An add-on with a status entry on one host gets a tile on every host it could be read
        from: "missing" where the package is not installed, "nostatus" where it is, in a version
        without the status entry.
@@ -802,8 +823,10 @@
                 gaps: covered.filter(t => t.coverage !== "checked").map(t =>
                     Object.assign({ pkg: t.pkg, label: t.label, coverage: t.coverage }, t.gapCheck ? { check: t.gapCheck.title } : {})),
             } : null;
-            const noProfile = r.reach === "ok" && r.discovery === "ok" && !profile && tiles.length > 0;
-            return { host, state, tiles, coverage, profile, noProfile };
+            const shown = r.reach === "ok" && r.discovery === "ok" && tiles.length > 0;
+            const noProfile = shown && !profile;
+            const limits = shown ? limitsOf(pkg => pkgOf(r, pkg) !== null) : null;
+            return { host, state, tiles, coverage, profile, noProfile, limits };
         });
 
         const versioned = [].concat(...rows.map(row => row.tiles))
@@ -986,6 +1009,7 @@
         packageOfManifestPath, statusEntry, menuLabel, statusArgv, packagesOf,
         connectionString, parseMachines, buildBoard, sortHosts, reachOf, compareVersions, notable,
         coverageOf, coverageSummary, checksCoverage, buildTasks, expectationOf, gapRating,
+        LIMIT_AREAS, limitsOf,
     };
     if (typeof module === "object" && module.exports) module.exports = api;
     else root.StatusBoard = api;

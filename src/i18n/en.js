@@ -63,6 +63,29 @@
         noProfileText: "Without a target profile every installed add-on counts as expected, so one that is missing does not show. Host Settings sets the profile on each host.",
         missingTitle: name => `${name} is missing`,
         missingExpectedText: "Not installed on this host, although its profile expects it.",
+        /* What the suite does not cover yet (lib/status.js, LIMIT_AREAS): planned scope, never a
+           check, a gap or a task. limitParts: what an add-on on the host covers of an area today. */
+        limitsToggle: n => `${n} areas not covered yet (planned)`,
+        limitsNote: "No add-on of the suite checks these areas yet. They count neither as checked nor as gaps, and they create no tasks.",
+        limitAreas: {
+            backup: "Proof of backup and restore",
+            vulnerabilities: "All known vulnerabilities",
+            tls: "TLS certificate lifecycle",
+            drift: "Configuration drift",
+            identity: "Identity checks",
+        },
+        limitGaps: {
+            backup: "Nothing proves across the suite that backups exist and that a restore works.",
+            vulnerabilities: "Not every package, image and container is checked for known vulnerabilities.",
+            tls: "Certificates, their expiry and their renewal are not checked.",
+            drift: "Changes against a known configuration are not tracked.",
+            identity: "Accounts, groups and sudo rights are not reviewed.",
+        },
+        limitParts: {
+            backup: "In part: Image Update Monitor keeps database dumps and image rollbacks from before an update, on this host only.",
+            vulnerabilities: "In part: Update Gaps shows CVE data for selected Ubuntu packages (with its network data).",
+            identity: "In part: Security Monitor shows SSH keys and the logins of the last 14 days.",
+        },
         /* The check that shows a gap, after the add-on's name: "Security Monitor: Container
            hardening partly checked". */
         checkGap: {

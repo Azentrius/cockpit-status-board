@@ -1124,6 +1124,156 @@ with sync_playwright() as p:
     no_problems(page, "expected, tasks")
     page.context.close()
 
+    # ---------- what the suite does not cover yet, and the evidence of an item with findings (scenario limits) ----------
+    # Expected values from lib/status.js (buildBoard, buildTasks, coverageSummary) at 2026-10-19
+    # 19:00 UTC: this host has the Security Monitor (its list counts one finding and lists none, its
+    # check checked at 18:55 UTC), Update Gaps and Image Update Monitor; plain-host has Cron Jobs
+    # only. Neither sends a target profile. The five areas are planned scope: no check, no gap, no task.
+    AREAS = ["backup", "vulnerabilities", "tls", "drift", "identity"]
+    LIMIT_TITLES = {"backup": "Proof of backup and restore", "vulnerabilities": "All known vulnerabilities", "tls": "TLS certificate lifecycle",
+                    "drift": "Configuration drift", "identity": "Identity checks"}
+    LIMIT_GAPS = {
+        "backup": "Nothing proves across the suite that backups exist and that a restore works.",
+        "vulnerabilities": "Not every package, image and container is checked for known vulnerabilities.",
+        "tls": "Certificates, their expiry and their renewal are not checked.",
+        "drift": "Changes against a known configuration are not tracked.",
+        "identity": "Accounts, groups and sudo rights are not reviewed."}
+    LIMIT_PARTS = {
+        "backup": "In part: Image Update Monitor keeps database dumps and image rollbacks from before an update, on this host only.",
+        "vulnerabilities": "In part: Update Gaps shows CVE data for selected Ubuntu packages (with its network data).",
+        "identity": "In part: Security Monitor shows SSH keys and the logins of the last 14 days."}
+    LIMIT_NOTE = "No add-on of the suite checks these areas yet. They count neither as checked nor as gaps, and they create no tasks."
+    LIMIT_TOGGLE = "5 areas not covered yet (planned)"
+    LIMIT_TASKS = ["localhost/security/item:exposure", "localhost/update-gaps/item:held", "localhost/update-gaps/item:reboot",
+                   "localhost/profile", "localhost/image-updates/item:updates", "localhost/update-gaps/item:pro", "plain-host/profile"]
+
+    def limits(page):
+        """Each host's fold of what the suite does not cover yet: its toggle, whether it is open, and
+        while it is the note and each area (id, title, what is missing, what an add-on covers)."""
+        return page.evaluate("""() => Array.from(document.querySelectorAll('.sb-host')).map(s => {
+            const f = s.querySelector(':scope > .sb-limits'), b = f && f.querySelector('.sb-limits__toggle');
+            return [s.dataset.host, f ? { toggle: b.innerText.trim(), open: b.getAttribute('aria-expanded'),
+                note: (f.querySelector('.sb-limits__note') || {}).innerText || null,
+                areas: Array.from(f.querySelectorAll('.sb-limits__area')).map(dt => [dt.dataset.area, dt.innerText,
+                    dt.nextElementSibling.firstChild.textContent, (dt.nextElementSibling.querySelector('.sb-limits__part') || {}).innerText || null]) }
+                : null]; })""")
+
+    def limits_open(parts):
+        return {"toggle": LIMIT_TOGGLE, "open": "true", "note": LIMIT_NOTE,
+                "areas": [[a, LIMIT_TITLES[a], LIMIT_GAPS[a], LIMIT_PARTS[a] if a in parts else None] for a in AREAS]}
+
+    def limit_counts(page):
+        """What counts on the page: the board's figure and labels, each host's figure, the tasks."""
+        return page.evaluate("""() => [document.querySelector('#coverage .sb-coverage__figure').innerText,
+            Array.from(document.querySelectorAll('#coverage .az-label')).map(l => l.innerText.trim()),
+            Array.from(document.querySelectorAll('.sb-host__coverage .sb-host__figure')).map(f => f.innerText),
+            document.querySelector('#count-tasks').innerText]""")
+
+    LIMITS_CLOSED = {"toggle": LIMIT_TOGGLE, "open": "false", "note": None, "areas": []}
+    page = open_page(browser, "scenario=limits&lang=en", tab=None)
+    got = tasks(page)
+    check([x["key"] for x in got] == LIMIT_TASKS, "the tasks of the scenario limits, none for an area the suite does not cover: "
+          + repr([x["key"] for x in got]))
+    item = next((x for x in got if x["key"] == "localhost/security/item:exposure"), {})
+    check({k: item.get(k) for k in ("group", "title", "where", "chips", "facts")} == {
+        "group": "danger", "title": "Reachable from the internet: 1", "where": "bastion · Security Monitor", "chips": [],
+        "facts": [["Evidence", "Checked 20:55, partial"], ["Resolved when", "the add-on rates the entry OK again"]]},
+          "an item whose list counts a finding it does not list: its evidence is not complete, although its check is checked: " + repr(item))
+    check([x["facts"][0] for x in got if x["key"].startswith("localhost/update-gaps/item:")] == [["Evidence", "Checked 19:02"]] * 3,
+          "an item without findings and without a check names no completeness, as before")
+    cov = page.evaluate("""() => [Array.from(document.querySelectorAll('#coverage .az-label')).map(l => [l.className, l.innerText.trim()]),
+        Array.from(document.querySelectorAll('#coverage .sb-chip')).map(c => [c.className, c.innerText.trim()])]""")
+    check(cov == [[[LABEL["info"], "2 hosts without a target profile"], [LABEL["ok"], "Complete"]], [["sb-chip sb-coverage__limits", LIMIT_TOGGLE]]],
+          "the board's coverage is complete for the add-ons, and names the areas not covered yet as a neutral chip, not a label: " + repr(cov))
+    counted = limit_counts(page)
+    check(counted == ["4 of 4 expected add-ons checked", ["2 hosts without a target profile", "Complete"], [], "7"],
+          "the areas count in no figure and make no task: " + repr(counted))
+    no_problems(page, "limits, tasks")
+
+    page.click("#tab-hosts")
+    wait_js(page, "document.querySelector('.sb-limits')")
+    check(limits(page) == [["localhost", LIMITS_CLOSED], ["plain-host", LIMITS_CLOSED]],
+          "every host that could be read has the fold, closed at first: " + repr(limits(page)))
+    before = limit_counts(page)
+    check(before[2] == ["3 of 3 expected add-ons checked", "1 of 1 expected add-ons checked"], "each host's figure counts its add-ons only: " + repr(before))
+    place = page.evaluate("""() => Array.from(document.querySelectorAll('.sb-limits')).map(f =>
+        [f.previousElementSibling.className, f.nextElementSibling.className])""")
+    check(place == [["sb-host__coverage", "sb-tiles"]] * 2, "the fold stands below the host's coverage line, above its tiles: " + repr(place))
+    page.click('[data-limits="localhost"] .sb-limits__toggle')
+    page.focus('[data-limits="plain-host"] .sb-limits__toggle')
+    page.keyboard.press("Enter")
+    want_limits = [["localhost", limits_open({"backup", "vulnerabilities", "identity"})], ["plain-host", limits_open(set())]]
+    check(limits(page) == want_limits, "open: each area with what is missing, and what an add-on on that host covers of it, only there: "
+          + repr(limits(page)))
+    check(page.evaluate("""() => Array.from(document.querySelectorAll('.sb-limits__toggle')).map(b =>
+        [b.getAttribute('aria-controls'), !!document.getElementById(b.getAttribute('aria-controls'))])""") == [["limits-0", True], ["limits-1", True]],
+          "each toggle controls its fold")
+    check(limit_counts(page) == before and page.evaluate("() => document.querySelectorAll('.sb-limits .az-label, .sb-limits .sb-chip').length") == 0,
+          "opening changes no figure, and the fold carries no label of a state")
+    page.evaluate("() => document.querySelector('#refresh').click()")
+    wait_idle(page)
+    check(limits(page) == want_limits and page.evaluate("document.activeElement.dataset.focus") == "limits:plain-host",
+          "open folds stay open when the board loads again, the focus stays on the toggle")
+    page.click(".az-switch")
+    page.wait_for_timeout(50)
+    check(limits(page) == want_limits and page.evaluate("""() => document.querySelector('[data-host="plain-host"] .sb-note').innerText""") == "Nothing that needs attention.",
+          "only what needs attention keeps the folds, also on a host left without tiles")
+    shot(page, "limits-hosts")
+    page.click(".az-switch")
+    no_problems(page, "limits, hosts")
+    page.context.close()
+
+    # in German, dark, and on a phone
+    page = open_page(browser, "scenario=limits", tab=None)
+    item = next((x for x in tasks(page) if x["key"] == "localhost/security/item:exposure"), {})
+    check(item.get("facts") == [["Nachweis", "Stand 20:55, teilweise"], ["Behoben, wenn", "das Add-on den Eintrag wieder als in Ordnung bewertet"]],
+          "the evidence of the item in German: " + repr(item.get("facts")))
+    check(page.inner_text("#coverage .sb-coverage__limits") == "5 Bereiche noch nicht abgedeckt (geplant)", "the chip in German")
+    page.click("#tab-hosts")
+    page.click('[data-limits="localhost"] .sb-limits__toggle')
+    de = dict(limits(page))["localhost"]
+    check(de["toggle"] == "5 Bereiche noch nicht abgedeckt (geplant)" and [a[1] for a in de["areas"]] == [
+        "Nachweis von Sicherung und Wiederherstellung", "Alle bekannten Schwachstellen", "Lebenszyklus der TLS-Zertifikate", "Konfigurationsdrift",
+        "Prüfung von Identitäten"] and de["note"].startswith("Diese Bereiche prüft noch kein Add-on der Suite.")
+          and de["areas"][1][3] == "Teilweise: Update Gaps zeigt CVE-Daten für ausgewählte Ubuntu-Pakete (mit seinen Netzdaten).",
+          "the fold in German: " + repr(de))
+    shot(page, "limits-hosts-de")
+    no_problems(page, "limits, German")
+    page.context.close()
+    page = open_page(browser, "scenario=limits&lang=en", dark=True)
+    page.click('[data-limits="localhost"] .sb-limits__toggle')
+    check(page.evaluate("document.documentElement.classList.contains('pf-v6-theme-dark')") and len(dict(limits(page))["localhost"]["areas"]) == 5,
+          "the fold in Cockpit's dark style")
+    shot(page, "limits-hosts-dark")
+    no_problems(page, "limits, dark")
+    page.context.close()
+    page = open_page(browser, "scenario=limits", width=375, height=812)
+    for host in ("localhost", "plain-host"):
+        page.click(f'[data-limits="{host}"] .sb-limits__toggle')
+    layout = page.evaluate("""() => ({ scroll: document.documentElement.scrollWidth,
+        low: Array.from(document.querySelectorAll('button')).filter(b => b.getBoundingClientRect().height < 44).map(b => b.id || b.dataset.focus || b.dataset.key),
+        wide: Array.from(document.querySelectorAll('.sb-limits, .sb-limits *, .sb-coverage__limits')).filter(e => e.getBoundingClientRect().right > 375).length,
+        stacked: Array.from(document.querySelectorAll('[data-limits="localhost"] .sb-limits__area')).every(dt =>
+            dt.nextElementSibling.getBoundingClientRect().top >= dt.getBoundingClientRect().bottom - 1) })""")
+    check(layout == {"scroll": 375, "low": [], "wide": 0, "stacked": True},
+          "the folds on a phone: no sideways scrolling, toggles at least 44 px high, each area above its text: " + repr(layout))
+    shot(page, "limits-phone")
+    no_problems(page, "limits, phone")
+    page.context.close()
+
+    # the hosts tab of scenario demo-tasks, with the target profiles and web1's fold open: the
+    # README's screenshot of the coverage (web1 has Image Update Monitor, Update Gaps and Security Monitor)
+    page = open_page(browser, "scenario=demo-tasks&lang=en")
+    page.click('[data-limits="web1"] .sb-limits__toggle')
+    demo = dict(limits(page))
+    check(demo.get("web1") == limits_open({"backup", "vulnerabilities", "identity"}) and demo.get("ci1") == LIMITS_CLOSED
+          and demo.get("old-host") is None and recorded_names(page) == []
+          and page.inner_text("#coverage .sb-coverage__figure") == "6 of 12 expected add-ons checked",
+          "demo-tasks: web1's fold open, the others closed, none for a host not read, the figure as before: " + repr(demo))
+    shot(page, "readme-coverage")
+    no_problems(page, "demo-tasks, hosts")
+    page.context.close()
+
     # ---------- package names like "constructor", and status output at and past 64 KiB ----------
     def edge_round(page, what):
         keys = page.evaluate("() => Array.from(document.querySelectorAll('.sb-tile')).map(t => t.dataset.key)")

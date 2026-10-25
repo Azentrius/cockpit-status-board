@@ -1502,6 +1502,39 @@ t("coverageSummary: only expected add-ons count", () => {
         "add-ons the host is not expected to have are no gap of the board's coverage");
 });
 
+/* ---------- what the suite does not cover yet ---------- */
+
+t("limits: every host that could be read names the five areas, with what its add-ons cover in part", () => {
+    assert.deepStrictEqual(SB.LIMIT_AREAS, ["backup", "vulnerabilities", "tls", "drift", "identity"]);
+    const rows = suite();
+    const parts = (rs, key) => row(rs, key).limits.map(l => [l.area, l.part]);
+    assert.deepStrictEqual(parts(rows, "web1"), [["backup", "image-updates"], ["vulnerabilities", "update-gaps"], ["tls", null], ["drift", null],
+        ["identity", "security"]], "Image Update Monitor's dumps, Update Gaps' CVE data, Security Monitor's keys and logins");
+    assert.deepStrictEqual(parts(rows, "localhost"), SB.LIMIT_AREAS.map(a => [a, null]), "none of them here, although the profile expects them");
+    assert.deepStrictEqual(parts(rows, "ci1"), [["backup", "image-updates"], ["vulnerabilities", null], ["tls", null], ["drift", null], ["identity", null]]);
+    assert.deepStrictEqual(["old-host", "locked-host"].map(k => row(rows, k).limits), [null, null], "nothing for a host that cannot be read");
+    /* installed in a version without the status entry is installed all the same */
+    const old = board();
+    assert.deepStrictEqual(parts(old, "db1"), [["backup", null], ["vulnerabilities", "update-gaps"], ["tls", null], ["drift", null], ["identity", null]]);
+    assert.deepStrictEqual(["dark-host", "new-host", "old-host"].map(k => row(old, k).limits), [null, null, null], "nor for one still loading");
+    assert.deepStrictEqual(SB.buildBoard([okHost("a", true, [["system", "system"]], {})], NOW).map(r => r.limits), [null], "nothing where the board shows nothing");
+    assert.deepStrictEqual(SB.limitsOf(() => false).map(l => l.part), [null, null, null, null, null]);
+});
+
+t("limits: never a check, never a gap, never a task", () => {
+    for (const rows of [suite(), board()]) {
+        const without = rows.map(r => Object.assign({}, r, { limits: null }));
+        assert.deepStrictEqual(SB.coverageSummary(rows), SB.coverageSummary(without));
+        assert.deepStrictEqual(keys(tasksOf(rows)), keys(tasksOf(without)));
+        rows.forEach(r => {
+            assert.ok(!r.tiles.some(x => SB.LIMIT_AREAS.includes(x.pkg)), "no tile of its own");
+            if (r.coverage) assert.strictEqual(r.coverage.total, r.tiles.filter(x => x.coverage && x.expected).length, "the host's figure counts add-ons only");
+        });
+        assert.ok(!keys(tasksOf(rows)).some(k => SB.LIMIT_AREAS.some(a => k.includes("/" + a))), "no task names an area");
+    }
+    assert.deepStrictEqual([SB.coverageSummary(suite()).total, SB.coverageSummary(suite()).checked], [12, 6], "as before the limits");
+});
+
 t("buildBoard: a tile says when another host runs a newer version", () => {
     const rows = SB.buildBoard([
         okHost("a", true, [["update-gaps", "update-gaps"], ["image-updates", "image-updates"]],
