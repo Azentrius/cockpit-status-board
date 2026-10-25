@@ -34,6 +34,18 @@
       eine Kachel sagt, wenn auf einem anderen Host eine neuere Version ihres Add-ons läuft.
     </p>
     <p>
+      A tab "Needs attention" lists what to do on all hosts, each task with its reasons, its evidence
+      and a button into the add-on. Each host shows its roles from the target profile that Host
+      Settings sends, how many of the add-ons it is expected to have were checked, and as planned
+      scope the areas the suite does not cover yet.
+    </p>
+    <p xml:lang="de">
+      Ein Reiter „Handlungsbedarf“ listet, was auf allen Hosts zu tun ist, jede Aufgabe mit ihren
+      Gründen, ihrem Nachweis und einem Knopf ins Add-on. Jeder Host zeigt seine Rollen aus dem
+      Sollprofil, das Host Settings meldet, wie viele der erwarteten Add-ons geprüft sind, und als
+      geplanten Umfang die Bereiche, die die Suite noch nicht abdeckt.
+    </p>
+    <p>
       The page only reads: it runs each add-on's status verb and never asks for administrative
       access. It belongs on the Cockpit host from which the others are reached.
     </p>
@@ -46,22 +58,32 @@
   <launchable type="cockpit-manifest">status-board</launchable>
   <url type="homepage">https://github.com/Azentrius/cockpit-status-board</url>
   <url type="bugtracker">https://github.com/Azentrius/cockpit-status-board/issues</url>
-  <!-- The pictures come from test/ui_test.py (CI artifact "screenshots", readme-board*.png), kept in docs/img/. -->
+  <!-- The pictures come from test/ui_test.py (CI artifact "screenshots", readme-*.png), kept in docs/img/. -->
   <screenshots>
     <screenshot type="default">
       <caption>A bastion with three hosts behind it: the coverage above, one tile per add-on</caption>
       <caption xml:lang="de">Ein Bastion-Host mit drei Hosts dahinter: oben die Abdeckung, eine Kachel je Add-on</caption>
-      <image type="source" width="1280" height="1737">https://raw.githubusercontent.com/Azentrius/cockpit-status-board/main/docs/img/board.png</image>
+      <image type="source" width="1280" height="1917">https://raw.githubusercontent.com/Azentrius/cockpit-status-board/main/docs/img/board.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Needs attention: the tasks of all hosts by state, with reasons, evidence and a button into the add-on</caption>
+      <caption xml:lang="de">Handlungsbedarf: die Aufgaben aller Hosts nach Zustand, mit Gründen, Nachweis und Knopf ins Add-on</caption>
+      <image type="source" width="1280" height="3366">https://raw.githubusercontent.com/Azentrius/cockpit-status-board/main/docs/img/tasks.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Hosts and coverage with target profiles, and the areas the suite does not cover yet</caption>
+      <caption xml:lang="de">Hosts und Abdeckung mit Sollprofilen und den Bereichen, die die Suite noch nicht abdeckt</caption>
+      <image type="source" width="1280" height="2554">https://raw.githubusercontent.com/Azentrius/cockpit-status-board/main/docs/img/coverage.png</image>
     </screenshot>
     <screenshot>
       <caption>Only what needs attention, with the entries of the Security Monitor folded out</caption>
       <caption xml:lang="de">Nur Auffälliges, mit den aufgeklappten Einträgen des Security Monitor</caption>
-      <image type="source" width="1280" height="2164">https://raw.githubusercontent.com/Azentrius/cockpit-status-board/main/docs/img/board-details.png</image>
+      <image type="source" width="1280" height="2344">https://raw.githubusercontent.com/Azentrius/cockpit-status-board/main/docs/img/board-details.png</image>
     </screenshot>
     <screenshot>
       <caption>The same board in the dark theme</caption>
       <caption xml:lang="de">Dasselbe Board im dunklen Design</caption>
-      <image type="source" width="1280" height="1737">https://raw.githubusercontent.com/Azentrius/cockpit-status-board/main/docs/img/board-dark.png</image>
+      <image type="source" width="1280" height="1917">https://raw.githubusercontent.com/Azentrius/cockpit-status-board/main/docs/img/board-dark.png</image>
     </screenshot>
   </screenshots>
   <developer id="de.azentrius">
