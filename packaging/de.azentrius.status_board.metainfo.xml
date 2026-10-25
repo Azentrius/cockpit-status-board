@@ -51,17 +51,17 @@
     <screenshot type="default">
       <caption>A bastion with three hosts behind it: the coverage above, one tile per add-on</caption>
       <caption xml:lang="de">Ein Bastion-Host mit drei Hosts dahinter: oben die Abdeckung, eine Kachel je Add-on</caption>
-      <image type="source" width="1280" height="1658">https://raw.githubusercontent.com/Azentrius/cockpit-status-board/main/docs/img/board.png</image>
+      <image type="source" width="1280" height="1737">https://raw.githubusercontent.com/Azentrius/cockpit-status-board/main/docs/img/board.png</image>
     </screenshot>
     <screenshot>
       <caption>Only what needs attention, with the entries of the Security Monitor folded out</caption>
       <caption xml:lang="de">Nur Auffälliges, mit den aufgeklappten Einträgen des Security Monitor</caption>
-      <image type="source" width="1280" height="2085">https://raw.githubusercontent.com/Azentrius/cockpit-status-board/main/docs/img/board-details.png</image>
+      <image type="source" width="1280" height="2164">https://raw.githubusercontent.com/Azentrius/cockpit-status-board/main/docs/img/board-details.png</image>
     </screenshot>
     <screenshot>
       <caption>The same board in the dark theme</caption>
       <caption xml:lang="de">Dasselbe Board im dunklen Design</caption>
-      <image type="source" width="1280" height="1658">https://raw.githubusercontent.com/Azentrius/cockpit-status-board/main/docs/img/board-dark.png</image>
+      <image type="source" width="1280" height="1737">https://raw.githubusercontent.com/Azentrius/cockpit-status-board/main/docs/img/board-dark.png</image>
     </screenshot>
   </screenshots>
   <developer id="de.azentrius">
