@@ -6,10 +6,13 @@
  * test/serve.py): the manifests, and the output of each add-on's status verb, the German one
  * when there is a .de.json and the page asks with --lang de.
  *
- * Query parameters: scenario=default|real|tasks|edge|hostile|broken|empty, chunk (characters per streamed chunk), badhosts=1 (the invalid names of the
- * machines fixture stay in the list), delay (ms per answer). Tests change window.__mock at run
- * time and read what the page did from it: calls, jumps, watches, unexpected, locations (every
- * cockpit.location.go()). The page's location is its hash (#/hosts), as in Cockpit. */
+ * Query parameters: scenario=default|real|demo|tasks|demo-tasks|edge|hostile|broken|empty, chunk
+ * (characters per streamed chunk), badhosts=1 (the invalid names of the machines fixture stay in
+ * the list), delay (ms per answer). demo and demo-tasks are real and tasks with neutral names
+ * (NEUTRAL) instead of the recorded ones: the README's screenshots. Tests change window.__mock at
+ * run time and read what the page did from it: calls, jumps, watches, unexpected, locations (every
+ * cockpit.location.go()); names says what the scenario replaces. The page's location is its hash
+ * (#/hosts), as in Cockpit. */
 (function () {
     "use strict";
     const params = new URLSearchParams(location.search);
@@ -37,6 +40,30 @@
         const m = JSON.parse(fixture("machines/99-webui.json"));
         if (params.get("badhosts") !== "1") Object.keys(m).filter(k => k.startsWith("bad")).forEach(k => delete m[k]);
         return m;
+    }
+
+    /* The scenarios demo and demo-tasks put these names, in this order, in place of the names of
+       real hosts in the recordings: the hosts, the user, and the jobs, containers and services on
+       them. Plain replacements of text; none of them touches a key of the status contract, a
+       manifest (the Image Update Monitor's command keeps diun-update.py) or a fixture's name. */
+    const NEUTRAL = [
+        ["public-host", "web1"], ["docker-host", "web1"], ["build-host", "ci1"], ["claw-host", "db1"],
+        ["vpn-host", "bastion"], ["stefan", "admin"],
+        ["backup-db-7c1e", "nightly-backup"], ["ollama", "search"], ["prod-mcp-1", "prod-api-1"],
+        ["docuseal", "shop"], ["glitchtip", "tracker"], ["plausible_db", "stats_db"], ["actual-ai", "cache"],
+        ["actual_server", "app_server"], ["calcom-db", "calendar-db"], ["21115/tcp relay-id", "8443/tcp https-alt"],
+    ];
+    const rename = (names, text) => names.reduce((t, [from, to]) => t.split(from).join(to), text);
+
+    /* A scenario with the neutral names in the switcher's list (keys, addresses, users, labels), in
+       the connections and in the host names; the answers follow through M.rewrite. */
+    function neutral(s) {
+        const hosts = {};
+        Object.keys(s.hosts).forEach(k => {
+            const h = s.hosts[k];
+            hosts[rename(NEUTRAL, k)] = h.hostname === undefined ? h : Object.assign({}, h, { hostname: rename(NEUTRAL, h.hostname) });
+        });
+        return { machines: JSON.parse(rename(NEUTRAL, JSON.stringify(s.machines))), hosts, names: NEUTRAL };
     }
 
     const SCENARIOS = {
@@ -71,7 +98,7 @@
         }),
         /* The four add-ons with the answers they give (status/real-*.json): all four on public-host,
            the Security Monitor on its recordings of the other hosts, the rest from the good
-           fixtures; the README's screenshots. */
+           fixtures. */
         real: () => {
             const machines = machinesFixture();
             delete machines["old-host"];
@@ -108,6 +135,9 @@
                 },
             };
         },
+        /* real and tasks with neutral names (NEUTRAL): the README's screenshots. */
+        demo: () => neutral(SCENARIOS.real()),
+        "demo-tasks": () => neutral(SCENARIOS.tasks()),
         /* The optional parts of the contract next to answers without them, for the tab "Needs
            attention": Security Monitor and Update Gaps with checks and findings (two ports
            reachable from the internet, a check done in part, an acceptance that runs and one that
@@ -233,6 +263,10 @@
         watches: [],
         unexpected: [],
         locations: [],
+        /* [recorded, neutral] names the scenario replaces (demo, demo-tasks), in every answer from
+           the fixtures and in the bridge's message for a locked key */
+        names: scenario.names || [],
+        rewrite: text => rename(M.names, text),
         dbusOpen: 0,
         listeners: [],
         locationListeners: [],
@@ -256,7 +290,7 @@
     /* What the bridge sends when it cannot reach a host (src/cockpit/remote.py). */
     function closeOf(reach) {
         switch (reach) {
-        case "locked": return { problem: "authentication-failed", error: "locked identity: /home/stefan/.ssh/id_ed25519",
+        case "locked": return { problem: "authentication-failed", error: M.rewrite("locked identity: /home/stefan/.ssh/id_ed25519"),
                                 "auth-method-results": { publickey: "not-provided" } };
         case "no-host": return { problem: "no-host", message: "[Errno -2] Name or service not known" };
         default: return { problem: reach };
@@ -273,7 +307,7 @@
     function answer(status, lang, name) {
         if (typeof status === "string") {
             const de = "status/" + status + "." + lang + ".json";
-            return Object.prototype.hasOwnProperty.call(FIX, de) ? FIX[de] : fixture("status/" + status + ".json");
+            return M.rewrite(Object.prototype.hasOwnProperty.call(FIX, de) ? FIX[de] : fixture("status/" + status + ".json"));
         }
         if (!status) throw fail({ problem: "not-found", message: "" });
         if (status.text !== undefined) return status.text;
