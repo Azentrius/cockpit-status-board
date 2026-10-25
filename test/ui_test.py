@@ -274,16 +274,21 @@ with sync_playwright() as p:
         return { hidden: c.hidden, place: c.previousElementSibling.id + '|' + c.nextElementSibling.id,
                  title: c.querySelector('h2').innerText, figure: c.querySelector('.sb-coverage__figure').innerText,
                  labels: Array.from(c.querySelectorAll('.az-label')).map(l => [l.className, l.innerText.trim()]) }; }""")
-    check(cov == {"hidden": False, "place": "alerts|tabs", "title": "Abdeckung", "figure": "6 von 9 Add-ons geprüft",
+    check(cov == {"hidden": False, "place": "alerts|tabs", "title": "Abdeckung", "figure": "6 von 9 erwarteten Add-ons geprüft",
                   "labels": [[LABEL["warning"], "1 Status nicht lesbar"], [LABEL["warning"], "1 kein Zugriff"], [LABEL["warning"], "1 veraltet"],
-                             [LABEL["danger"], "2 Hosts nicht gelesen"]]},
-          "the board's coverage: add-ons checked, what keeps the others from it, hosts not read: " + repr(cov))
-    lines = dict(page.evaluate("""() => Array.from(document.querySelectorAll('.sb-host')).map(s =>
-        [s.dataset.host, (s.querySelector('.sb-host__header + .sb-host__coverage') || {}).innerText || null])"""))
-    check(lines == {"localhost": "2 von 2 Add-ons geprüft", "public-host": "3 von 3 Add-ons geprüft",
-                    "build-host": "0 von 2 Add-ons geprüft · Cron Jobs: kein Zugriff · Image Update Monitor: veraltet",
-                    "claw-host": "1 von 2 Add-ons geprüft · Update Gaps: Status nicht lesbar", "locked-host": None, "old-host": None},
-          "each host's coverage below its name; not installed and no status entry are no gap; none for hosts not read: " + repr(lines))
+                             [LABEL["danger"], "2 Hosts nicht gelesen"], [LABEL["info"], "4 Hosts ohne Sollprofil"]]},
+          "the board's coverage: expected add-ons checked (without a profile the installed ones), what keeps the others from it, "
+          "hosts not read, hosts without a target profile as a notice: " + repr(cov))
+    lines = dict(page.evaluate("""() => Array.from(document.querySelectorAll('.sb-host')).map(s => {
+        const c = s.querySelector('.sb-host__header + .sb-host__coverage');
+        return [s.dataset.host, c ? [(c.querySelector('.sb-host__figure') || {}).innerText || null,
+            Array.from(c.querySelectorAll('.sb-host__profile > *')).map(x => [x.className, x.innerText.trim()])] : null]; })"""))
+    none = [[LABEL["info"], "Kein Sollprofil"]]
+    check(lines == {"localhost": ["2 von 2 erwarteten Add-ons geprüft", none], "public-host": ["3 von 3 erwarteten Add-ons geprüft", none],
+                    "build-host": ["0 von 2 erwarteten Add-ons geprüft · Cron Jobs: kein Zugriff · Image Update Monitor: veraltet", none],
+                    "claw-host": ["1 von 2 erwarteten Add-ons geprüft · Update Gaps: Status nicht lesbar", none], "locked-host": None, "old-host": None},
+          "each host's coverage below its name, and that it has no target profile (a notice); not installed and no status entry are "
+          "no gap; nothing for hosts not read: " + repr(lines))
     shot(page, "board")
     no_problems(page, "board")
 
@@ -549,7 +554,8 @@ with sync_playwright() as p:
     text = page.inner_text("body")
     check(not re.search(r"[äöüÄÖÜß„“]|\b(Nicht|Stand|Achtung|Hinweis|dieser|Verbindung)\b", text), "the English board has no German")
     for word in ("Not installed", "Unreachable", "Key locked", "Out of date", "No access", "No status", "Status unreadable", "Refresh", "this host",
-                 "Coverage", "6 of 9 add-ons checked", "2 hosts not read", "0 of 2 add-ons checked · Cron Jobs: no access · Image Update Monitor: out of date"):
+                 "Coverage", "6 of 9 expected add-ons checked", "2 hosts not read", "4 hosts without a target profile", "No target profile",
+                 "0 of 2 expected add-ons checked · Cron Jobs: no access · Image Update Monitor: out of date"):
         check(word in text, "English: " + word)
     check(all(c["args"][3] == "en" for c in calls(page, "spawn") if c["args"][1:3] == ["status", "--lang"]), "the status verb in English")
     check(page.inner_text("#meta") == "Loaded at 21:00 · 6 hosts", "English header: " + page.inner_text("#meta"))
@@ -680,10 +686,11 @@ with sync_playwright() as p:
           "the switch leaves out what needs no attention: " + repr(keys))
     cov = page.evaluate("""() => [document.querySelector('#coverage').hidden, document.querySelector('#coverage .sb-coverage__figure').innerText,
         Array.from(document.querySelectorAll('#coverage .az-label')).map(l => l.innerText.trim()),
-        Array.from(document.querySelectorAll('.sb-host__coverage')).map(p => p.innerText)]""")
-    check(cov == [False, "14 of 15 add-ons checked", ["1 out of date"],
-                  ["4 of 4 add-ons checked", "3 of 4 add-ons checked · Image Update Monitor: out of date", "3 of 3 add-ons checked",
-                   "4 of 4 add-ons checked"]],
+        Array.from(document.querySelectorAll('.sb-host__coverage .sb-host__figure')).map(p => p.innerText),
+        Array.from(document.querySelectorAll('.sb-host__coverage .sb-host__profile')).map(p => p.innerText.trim())]""")
+    check(cov == [False, "14 of 15 expected add-ons checked", ["1 out of date", "4 hosts without a target profile"],
+                  ["4 of 4 expected add-ons checked", "3 of 4 expected add-ons checked · Image Update Monitor: out of date", "3 of 3 expected add-ons checked",
+                   "4 of 4 expected add-ons checked"], ["No target profile"] * 4],
           "the coverage stays with the switch, of the board and of every host: " + repr(cov))
     check(host_label(page, "claw-host") == [LABEL["danger"] + " az-label--strong", "Problem"], "the row's label still says the whole row")
     check(len(entries(key)) == 5, "an open tile stays open with the switch")
@@ -723,7 +730,9 @@ with sync_playwright() as p:
 
     # ---------- Needs attention: the tasks over all hosts (scenario tasks: checks, findings, profile) ----------
     # Expected values from lib/status.js (buildTasks, coverageSummary) at 2026-10-19 19:00 UTC; the
-    # browser is in Europe/Berlin (UTC+2 until 25 October).
+    # browser is in Europe/Berlin (UTC+2 until 25 October). Host Settings sends the target profile
+    # (role web, five add-ons, update-gaps/cve left out) on vpn-host, which lacks three of them, and
+    # on public-host, where Open CVEs is then not applicable; build-host sends none.
     TASKS_DE = [
         ("old-host/unreachable", "danger", "Problem", "Nicht erreichbar"),
         ("public-host/security/finding:port.6379-tcp", "danger", "Problem", "6379/tcp redis"),
@@ -731,28 +740,32 @@ with sync_playwright() as p:
         ("public-host/cronjobs/item:failed-runs", "danger", "Problem", "Fehlgeschlagene Läufe (24 h): 2"),
         ("locked-host/locked", "warning", "Achtung", "Schlüssel gesperrt"),
         ("public-host/update-gaps/finding:restart.kernel", "warning", "Achtung", "Restart for kernel 6.8.0-49"),
+        ("localhost/image-updates/coverage", "warning", "Achtung", "Image Update Monitor fehlt"),
+        ("localhost/security/coverage", "warning", "Achtung", "Security Monitor fehlt"),
+        ("localhost/update-gaps/coverage", "warning", "Achtung", "Update Gaps fehlt"),
         ("build-host/cronjobs/coverage", "warning", "Achtung", "Cron Jobs: kein Zugriff"),
         ("build-host/image-updates/coverage", "warning", "Achtung", "Image Update Monitor: veraltet"),
         ("public-host/security/coverage", "warning", "Achtung", "Security Monitor: Container hardening teilweise geprüft"),
-        ("public-host/update-gaps/coverage", "warning", "Achtung", "Update Gaps: Open CVEs (network data) nicht eingerichtet"),
+        ("build-host/profile", "info", "Hinweis", "Kein Sollprofil"),
         ("public-host/image-updates/item:updates", "info", "Hinweis", "Updates verfügbar: 3"),
     ]
     page = open_page(browser, "scenario=tasks", tab=None)
     ts = tab_state(page)
-    check(ts == {"hash": "", "selected": ["tab-tasks"], "shown": ["tasks"], "rows": 0, "tasks": 11, "switch": False},
+    check(ts == {"hash": "", "selected": ["tab-tasks"], "shown": ["tasks"], "rows": 0, "tasks": 14, "switch": False},
           "without a location the board opens on Needs attention; the switch belongs to the other tab: " + repr(ts))
     tabs = page.evaluate("""() => Array.from(document.querySelectorAll('[role=tab]')).map(t =>
         [t.querySelector('[data-t]').innerText, (t.querySelector('.sb-count') || {}).innerText || '', t.tabIndex, Math.round(t.getBoundingClientRect().height) >= 44])""")
-    check(tabs == [["Handlungsbedarf", "11", 0, True], ["Hosts und Abdeckung", "", -1, True]] and
+    check(tabs == [["Handlungsbedarf", "14", 0, True], ["Hosts und Abdeckung", "", -1, True]] and
           page.evaluate("document.querySelector('[role=tablist]').getAttribute('aria-label')") == "Ansichten",
           "two tabs, the number of tasks on the first: " + repr(tabs))
     got = tasks(page)
     check([(x["key"], x["group"], x["label"][1], x["title"]) for x in got] == TASKS_DE and all(x["label"][0] == LABEL[x["group"]] for x in got),
           "the tasks in order: state, a host not read first, exposure, older first, then host and add-on: "
           + repr([(x["key"], x["label"][1], x["title"]) for x in got]))
+    check(not any(x["key"] == "public-host/update-gaps/coverage" for x in got), "Open CVEs, left out by public-host's profile, is no gap there")
     groups = page.evaluate("""() => Array.from(document.querySelectorAll('.sb-group')).map(g =>
         [g.dataset.group, g.querySelector('h2 .az-label').innerText.trim(), g.querySelector('h2 .sb-count').innerText])""")
-    check(groups == [["danger", "Problem", "4"], ["warning", "Achtung", "6"], ["info", "Hinweis", "1"]], "grouped by the board's words: " + repr(groups))
+    check(groups == [["danger", "Problem", "4"], ["warning", "Achtung", "8"], ["info", "Hinweis", "2"]], "grouped by the board's words: " + repr(groups))
     by = {x["key"]: x for x in got}
     want = {
         "public-host/security/finding:port.6379-tcp": {
@@ -777,9 +790,18 @@ with sync_playwright() as p:
             "facts": [["Seit", "16. Okt., 06:00"], ["Nachweis", "Stand 20:45, vollständig"], ["Behoben, wenn", "eine vollständige Prüfung den Befund nicht mehr findet"]],
             "button": "In Update Gaps öffnen"},
         "public-host/security/coverage": {
-            "isnew": None, "where": "public-host · Security Monitor", "chips": [], "detail": "Container hardening: Docker could not be asked", "sub": None,
-            "facts": [["Nachweis", "Stand 20:50"], ["Behoben, wenn", "das Add-on rechtzeitig und mit vollständigen Prüfungen antwortet"]],
+            "isnew": None, "where": "public-host · Security Monitor", "chips": ["erwartet für Rolle web"], "detail": "Container hardening: Docker could not be asked",
+            "sub": None, "facts": [["Nachweis", "Stand 20:50"], ["Behoben, wenn", "das Add-on rechtzeitig und mit vollständigen Prüfungen antwortet"]],
             "button": "In Security Monitor öffnen"},
+        "localhost/security/coverage": {
+            "isnew": None, "where": "vpn-host · Security Monitor", "chips": ["erwartet für Rolle web"],
+            "detail": "Auf diesem Host nicht installiert, obwohl sein Sollprofil es erwartet.", "sub": None,
+            "facts": [["Behoben, wenn", "das Add-on auf diesem Host installiert ist und rechtzeitig antwortet"]], "button": None},
+        "build-host/profile": {
+            "isnew": None, "where": "build-host (CI)", "chips": [],
+            "detail": "Ohne Sollprofil gilt jedes installierte Add-on als erwartet; ein fehlendes fällt so nicht auf. "
+                      "Das Sollprofil legen Sie in Host Settings auf jedem Host fest.", "sub": None,
+            "facts": [["Behoben, wenn", "Host Settings für diesen Host ein Sollprofil meldet"]], "button": None},
         "build-host/image-updates/coverage": {
             "isnew": None, "where": "build-host (CI) · Image Update Monitor", "chips": [], "detail": "Seine Daten sind seit 18. Okt., 19:12 veraltet.", "sub": None,
             "facts": [["Nachweis", "Stand 18. Okt., 07:12"], ["Behoben, wenn", "das Add-on rechtzeitig und mit vollständigen Prüfungen antwortet"]],
@@ -790,28 +812,35 @@ with sync_playwright() as p:
         check(have == w, "the task " + key + ": " + repr(have))
     check(by["build-host/cronjobs/coverage"]["detail"].startswith("Ohne Administratorzugriff ist hier nichts lesbar."), "no access says why")
     check(by["locked-host/locked"]["sub"] == "/home/stefan/.ssh/id_ed25519" and by["locked-host/locked"]["button"] == "Host öffnen", "a locked key")
+    check([by[k]["chips"] for k in ("build-host/cronjobs/coverage", "build-host/image-updates/coverage")] == [[], []],
+          "the gaps of a host without a target profile name no role")
 
-    # the coverage above both tabs, with the gaps that checks show
+    # the coverage above both tabs, with the gaps that checks show, the expected add-ons that are
+    # missing, and the host without a target profile as a notice
     cov = page.evaluate("""() => [document.querySelector('#coverage .sb-coverage__figure').innerText,
         Array.from(document.querySelectorAll('#coverage .az-label')).map(l => [l.className, l.innerText.trim()])]""")
-    check(cov == ["4 von 8 Add-ons geprüft", [[LABEL["warning"], "1 kein Zugriff"], [LABEL["warning"], "1 nicht eingerichtet"], [LABEL["warning"], "1 veraltet"],
-                                              [LABEL["warning"], "1 teilweise geprüft"], [LABEL["danger"], "2 Hosts nicht gelesen"]]],
-          "the board's coverage with gaps of single checks: " + repr(cov))
+    check(cov == ["6 von 12 erwarteten Add-ons geprüft", [[LABEL["warning"], "3 nicht installiert"], [LABEL["warning"], "1 kein Zugriff"],
+                                                          [LABEL["warning"], "1 veraltet"], [LABEL["warning"], "1 teilweise geprüft"],
+                                                          [LABEL["danger"], "2 Hosts nicht gelesen"], [LABEL["info"], "1 Host ohne Sollprofil"]]],
+          "the board's coverage with gaps of single checks and missing add-ons: " + repr(cov))
 
     # a click opens the add-on on the task's host, at the finding's, item's or check's place
     for key in ("public-host/security/finding:port.6379-tcp", "public-host/update-gaps/finding:restart.kernel", "public-host/security/coverage",
-                "public-host/update-gaps/coverage", "build-host/image-updates/coverage", "build-host/cronjobs/coverage",
+                "build-host/image-updates/coverage", "build-host/cronjobs/coverage",
                 "public-host/cronjobs/item:failed-runs", "public-host/image-updates/item:updates", "old-host/unreachable"):
         task_button(page, key).click()
     check(mock(page, "jumps") == [["/security#/exposure/6379-tcp", "public-host"], ["/update-gaps#/restart", "public-host"],
-                                  ["/security#/containers", "public-host"], ["/update-gaps", "public-host"], ["/image-updates#/updates", "build-host"],
+                                  ["/security#/containers", "public-host"], ["/image-updates#/updates", "build-host"],
                                   ["/cronjobs", "build-host"], ["/cronjobs", "public-host"], ["/image-updates#/updates", "public-host"],
                                   ["/system", "old-host"]],
           "the jumps of the tasks, each on its host: " + json.dumps(mock(page, "jumps")))
+    check(page.evaluate("""() => ['localhost/image-updates/coverage', 'localhost/security/coverage', 'localhost/update-gaps/coverage', 'build-host/profile']
+        .map(k => document.querySelectorAll('[data-task="' + k + '"] button').length)""") == [0, 0, 0, 0],
+          "a missing add-on opens nothing, nor does the notice of a host without Host Settings")
 
     # the folds: accepted findings and checks that do not apply, closed at first
     check(folds(page) == [{"fold": "accepted", "title": "Befristet akzeptiert", "count": "1", "open": "false", "head": [], "rows": []},
-                          {"fold": "notapplicable", "title": "Nicht anwendbar", "count": "1", "open": "false", "head": [], "rows": []}],
+                          {"fold": "notapplicable", "title": "Nicht anwendbar", "count": "2", "open": "false", "head": [], "rows": []}],
           "two folds, closed: " + repr(folds(page)))
     page.focus('[data-fold="accepted"] .sb-fold__toggle')
     page.keyboard.press("Enter")
@@ -820,10 +849,11 @@ with sync_playwright() as p:
     want_folds = [
         {"fold": "accepted", "title": "Befristet akzeptiert", "count": "1", "open": "true", "head": ["Befund", "Host", "Add-on", "Akzeptiert bis"],
          "rows": [["postgresql-16 is held", "public-host", "Update Gaps", "30. Okt., 01:00"]]},
-        {"fold": "notapplicable", "title": "Nicht anwendbar", "count": "1", "open": "true", "head": ["Prüfung", "Host", "Add-on", "Grund"],
-         "rows": [["fail2ban", "public-host", "Security Monitor", "fail2ban is not installed"]]},
+        {"fold": "notapplicable", "title": "Nicht anwendbar", "count": "2", "open": "true", "head": ["Prüfung", "Host", "Add-on", "Grund", "Festgelegt durch"],
+         "rows": [["fail2ban", "public-host", "Security Monitor", "fail2ban is not installed", "Add-on"],
+                  ["Open CVEs (network data)", "public-host", "Update Gaps", "network data off on purpose", "Sollprofil"]]},
     ]
-    check(folds(page) == want_folds, "open: the accepted finding until when, the check with its reason: " + repr(folds(page)))
+    check(folds(page) == want_folds, "open: the accepted finding until when, the checks with their reason and who left them out: " + repr(folds(page)))
     page.evaluate("() => document.querySelector('#refresh').click()")   # a load, while the focus stays on the toggle
     wait_idle(page)
     check(folds(page) == want_folds and page.evaluate("document.activeElement.dataset.focus") == "fold:accepted",
@@ -836,16 +866,40 @@ with sync_playwright() as p:
     ts = tab_state(page)
     check(ts == {"hash": "#/hosts", "selected": ["tab-hosts"], "shown": ["board"], "rows": 5, "tasks": 0, "switch": True}
           and mock(page, "locations") == ["/hosts"], "a click on the tab sets the location: " + repr(ts) + " " + repr(mock(page, "locations")))
-    lines = dict(page.evaluate("""() => Array.from(document.querySelectorAll('.sb-host')).map(s =>
-        [s.dataset.host, (s.querySelector('.sb-host__coverage') || {}).innerText || null])"""))
-    check(lines == {"localhost": "2 von 2 Add-ons geprüft",
-                    "public-host": "2 von 4 Add-ons geprüft · Security Monitor: Container hardening teilweise geprüft · Update Gaps: Open CVEs (network data) nicht eingerichtet",
-                    "build-host": "0 von 2 Add-ons geprüft · Cron Jobs: kein Zugriff · Image Update Monitor: veraltet", "locked-host": None, "old-host": None},
-          "each host's line names the add-on and the check: " + repr(lines))
+    lines = dict(page.evaluate("""() => Array.from(document.querySelectorAll('.sb-host')).map(s => {
+        const c = s.querySelector('.sb-host__header + .sb-host__coverage');
+        return [s.dataset.host, c ? [(c.querySelector('.sb-host__figure') || {}).innerText || null,
+            Array.from(c.querySelectorAll('.sb-host__profile > *')).map(x => [x.className, x.innerText.trim()])] : null]; })"""))
+    role = [["sb-chip", "Rolle web"]]
+    check(lines == {"localhost": ["2 von 5 erwarteten Add-ons geprüft · Image Update Monitor: nicht installiert · Security Monitor: nicht installiert"
+                                  " · Update Gaps: nicht installiert", role],
+                    "public-host": ["4 von 5 erwarteten Add-ons geprüft · Security Monitor: Container hardening teilweise geprüft", role],
+                    "build-host": ["0 von 2 erwarteten Add-ons geprüft · Cron Jobs: kein Zugriff · Image Update Monitor: veraltet",
+                                   [[LABEL["info"], "Kein Sollprofil"]]], "locked-host": None, "old-host": None},
+          "each host's line names the add-on and the check, then its roles as neutral chips or that it has no target profile: " + repr(lines))
+    # an expected add-on that is missing is a warning; on a host without a profile it stays neutral
+    check(tile_label(page, "localhost/security") == [LABEL["warning"], "Fehlt", True]
+          and "Auf diesem Host nicht installiert, obwohl sein Sollprofil es erwartet." in tile_text(page, "localhost/security")
+          and page.evaluate("""() => document.querySelector('[data-key="localhost/security"]').tagName""") == "DIV",
+          "missing, although expected: a warning that opens nothing: " + repr(tile_label(page, "localhost/security")))
+    check(tile_label(page, "build-host/security") == [LABEL["none"], "Nicht installiert", True] and
+          tile_label(page, "build-host/host-settings") == [LABEL["none"], "Nicht installiert", True],
+          "not installed and not expected: neutral, as before")
+    check(host_label(page, "localhost") == [LABEL["warning"] + " az-label--strong", "Achtung"], "the missing add-ons make the row a warning")
+    check(tile_label(page, "public-host/update-gaps") == [LABEL["warning"], "Achtung", True], "the tile itself says what the add-on says")
+    page.click(".az-switch")
+    page.wait_for_timeout(50)
+    shown = page.evaluate("() => Array.from(document.querySelectorAll('[data-host=\"localhost\"] .sb-tile')).map(t => t.dataset.key)")
+    check(shown == ["localhost/image-updates", "localhost/security", "localhost/update-gaps"] and
+          page.evaluate("() => document.querySelectorAll('.sb-host__coverage .sb-host__profile').length") == 3,
+          "only what needs attention keeps the missing add-ons and every host's line: " + repr(shown))
+    shot(page, "tasks-hosts")
+    page.click(".az-switch")
+    page.wait_for_timeout(50)
     page.evaluate("() => history.back()")
     wait_js(page, "location.hash === '' && document.querySelector('.sb-task')")
     ts = tab_state(page)
-    check(ts["selected"] == ["tab-tasks"] and ts["tasks"] == 11 and ts["rows"] == 0, "Back returns to the tasks: " + repr(ts))
+    check(ts["selected"] == ["tab-tasks"] and ts["tasks"] == 14 and ts["rows"] == 0, "Back returns to the tasks: " + repr(ts))
     page.focus("#tab-tasks")
     page.keyboard.press("ArrowRight")
     check(tab_state(page)["selected"] == ["tab-hosts"] and page.evaluate("document.activeElement.id") == "tab-hosts", "the arrow keys move to the next tab")
@@ -871,26 +925,42 @@ with sync_playwright() as p:
     check(not re.search(r"[äöüÄÖÜß„“]|\b(Nicht|Stand|Achtung|Hinweis|dieser|Verbindung|Seit|Nachweis|Befund)\b", text), "the English tasks have no German")
     got = tasks(page)
     check([x["title"] for x in got] == ["Unreachable", "6379/tcp redis", "5432/tcp postgres", "Failed runs (24 h): 2", "Key locked", "Restart for kernel 6.8.0-49",
+                                        "Image Update Monitor is missing", "Security Monitor is missing", "Update Gaps is missing",
                                         "Cron Jobs: no access", "Image Update Monitor: out of date", "Security Monitor: Container hardening partly checked",
-                                        "Update Gaps: Open CVEs (network data) not set up", "Updates available: 3"],
+                                        "No target profile", "Updates available: 3"],
           "the English titles: " + repr([x["title"] for x in got]))
+    missing = next((x for x in got if x["key"] == "localhost/update-gaps/coverage"), {})
+    check({k: missing.get(k) for k in ("chips", "detail", "facts", "button")} == {
+        "chips": ["expected for role web"], "detail": "Not installed on this host, although its profile expects it.",
+        "facts": [["Resolved when", "the add-on is installed on this host and answers in time"]], "button": None},
+          "a missing add-on in English: " + repr(missing))
+    notice = next((x for x in got if x["key"] == "build-host/profile"), {})
+    check(notice.get("group") == "info" and (notice.get("detail") or "").startswith("Without a target profile every installed add-on counts as expected")
+          and notice.get("facts") == [["Resolved when", "Host Settings sends a target profile for this host"]],
+          "the notice in English: " + repr(notice))
     fresh = [x for x in got if x["key"] == "public-host/security/finding:port.5432-tcp"][0]
     check({k: fresh[k] for k in ("isnew", "chips", "facts", "button")} == {
         "isnew": "new", "chips": ["reachable from the internet", "fix available"],
         "facts": [["Since", "20:30"], ["Evidence", "Checked 20:50, complete"], ["Resolved when", "a complete check no longer finds it"]],
         "button": "Open in Security Monitor"}, "a new finding in English: " + repr(fresh))
     check([x["chips"] for x in got if x["key"].endswith("item:updates")] == [["summary only"]], "summary only")
-    for word in ("Needs attention", "Hosts and coverage", "4 of 8 add-ons checked", "1 partly checked", "1 not set up", "Accepted", "Not applicable",
-                 "Resolved when", "findings unknown", "Open the host"):
+    for word in ("Needs attention", "Hosts and coverage", "6 of 12 expected add-ons checked", "1 partly checked", "3 not installed",
+                 "1 host without a target profile", "Accepted", "Not applicable", "Resolved when", "findings unknown", "Open the host"):
         check(word in text, "English: " + word)
     page.click('[data-fold="accepted"] .sb-fold__toggle')
     check(folds(page)[0]["rows"] == [["postgresql-16 is held", "public-host", "Update Gaps", "Oct 30, 01:00"]] and
           folds(page)[0]["head"] == ["Finding", "Host", "Add-on", "Accepted until"], "the accepted finding in English: " + repr(folds(page)[0]))
+    page.click('[data-fold="notapplicable"] .sb-fold__toggle')
+    check(folds(page)[1]["head"] == ["Check", "Host", "Add-on", "Reason", "Set by"] and
+          [r[4] for r in folds(page)[1]["rows"]] == ["Add-on", "Target profile"], "who left a check out, in English: " + repr(folds(page)[1]))
     shot(page, "readme-tasks")
     page.click("#tab-hosts")
-    line = page.inner_text('[data-host="public-host"] .sb-host__coverage')
-    check(line == "2 of 4 add-ons checked · Security Monitor: Container hardening partly checked · Update Gaps: Open CVEs (network data) not set up",
-          "the host's line in English: " + line)
+    line = page.inner_text('[data-host="public-host"] .sb-host__coverage .sb-host__figure')
+    check(line == "4 of 5 expected add-ons checked · Security Monitor: Container hardening partly checked", "the host's line in English: " + line)
+    profiles = page.evaluate("() => Array.from(document.querySelectorAll('.sb-host__profile')).map(p => p.innerText.trim())")
+    check(profiles == ["Role web", "No target profile", "Role web"], "roles and the notice in English: " + repr(profiles))
+    check("Missing" in tile_text(page, "localhost/security") and "although its profile expects it" in tile_text(page, "localhost/security"),
+          "a missing add-on's tile in English: " + tile_text(page, "localhost/security"))
     no_problems(page, "tasks, English")
     page.context.close()
 
@@ -898,6 +968,9 @@ with sync_playwright() as p:
     page = open_page(browser, "scenario=tasks", tab=None, dark=True)
     check(page.evaluate("document.documentElement.classList.contains('pf-v6-theme-dark')"), "the tasks in Cockpit's dark style")
     shot(page, "tasks-dark")
+    page.click("#tab-hosts")
+    wait_js(page, "document.querySelector('.sb-host__profile')")
+    shot(page, "tasks-hosts-dark")
     no_problems(page, "tasks, dark")
     page.context.close()
     page = open_page(browser, "scenario=tasks", tab=None, width=375, height=812)
@@ -917,7 +990,10 @@ with sync_playwright() as p:
     check(layout == {"scroll": 375, "low": [], "narrow": []}, "the same with the folds open: " + repr(layout))
     shot(page, "tasks-phone")
     page.click("#tab-hosts")
-    check(page.evaluate("document.documentElement.scrollWidth") <= 375, "and on the hosts tab with the lines of the checks")
+    layout = phone(page)
+    check(layout["scroll"] <= 375 and layout["low"] == [],
+          "and on the hosts tab with the lines of the checks, the roles and the notice: " + repr(layout))
+    shot(page, "tasks-hosts-phone")
     no_problems(page, "tasks, phone")
     page.context.close()
 

@@ -113,7 +113,10 @@
            reachable from the internet, a check done in part, an acceptance that runs and one that
            has ended, a check not set up, one that does not apply), Host Settings with checks and a
            profile; Cron Jobs and Image Update Monitor as before (summary only, no access, out of
-           date); a host that cannot be reached and one with a locked key. */
+           date); a host that cannot be reached and one with a locked key. The profile (role web,
+           five add-ons, update-gaps/cve left out) comes from Host Settings on this host, which
+           lacks three of the add-ons it expects, and on public-host, where Open CVEs is then not
+           applicable; build-host has no Host Settings, so no target profile. */
         tasks: () => {
             const machines = machinesFixture();
             delete machines["claw-host"];
@@ -130,6 +133,7 @@
                         "image-updates": pkg("image-updates", "good-image-updates"),
                         security: pkg("security", "ext-good-security"),
                         "update-gaps": pkg("update-gaps", "ext-good-update-gaps"),
+                        "host-settings": pkg("host-settings", "ext-good-host-settings"),
                     }),
                     "build-host": host("build-host", {
                         system: pkg("system", null),

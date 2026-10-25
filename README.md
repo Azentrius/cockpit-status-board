@@ -37,7 +37,8 @@ of the address (`#/tasks`, `#/hosts`), so Back, a reload and a bookmark keep it.
 - **Needs attention:** one list over all hosts of what to do. A task is an open finding of an
   add-on that sends single findings (one port reachable from the internet, one restart), else an
   entry in Notice, Warning or Problem (marked "summary only" where the add-on sends nothing but its
-  summary), a gap in the coverage, or a host that cannot be read. The list is grouped by state and
+  summary), a gap in the coverage (an expected add-on that is missing included), a host that
+  cannot be read, or, as a notice, a host without a target profile. The list is grouped by state and
   ordered without a score: within a state a host that cannot be read first, then what is
   reachable from the internet before what is reachable from some addresses, internally or locally,
   then what is known to be exploited, then older before newer; a finding of the last day is
@@ -45,34 +46,49 @@ of the address (`#/tasks`, `#/hosts`), so Back, a reload and a bookmark keep it.
   available"), since when, its evidence ("Checked 20:50, complete") and what resolves it, and its
   button opens the add-on on its host at that place. Below, folded: findings accepted for a time,
   with the day the acceptance ends (accepted is never resolved), and checks that do not apply,
-  with their reason.
+  with their reason and whether the add-on or the host's target profile left them out.
 - **One row per host,** in the order of the host switcher, this host first. The row's header names
   the host, the connection when it differs (`admin@web1`, `db1:2222`) and the most severe state of
   its add-ons, or why the host cannot be read ("Unreachable", "Key locked").
 - **One tile per add-on:** its state in the status language (OK, Notice, Warning, Problem, Unknown),
   its most important figure with its title below it ("3" over "Updates available"), its summary
   and the age of its data. The tiles stand in the same order on every host, so gaps show: an
-  add-on that runs on one host but is missing on another gets a neutral tile "Not installed" there.
+  add-on that runs on one host but is missing on another gets a neutral tile "Not installed" there,
+  or a warning "Missing" where the host's target profile expects it.
 - **What cannot be read says so:** a host that does not answer ("Unreachable", with Cockpit's
   reason), a locked SSH key ("Key locked"), an add-on without administrative access ("No access"),
   in a version without the status contract ("No status") or with an answer the board cannot use
   ("Status unreadable", with the reason). Data older than the add-on allows (`stale_after`) makes
   the tile a warning, "out of date since …". "No access" and an answer that rates nothing ("Not
   checked") are warnings too: the board knows nothing about that add-on there.
-- **Coverage:** above both tabs, how many add-ons answered in time with something rated ("6 of 9
-  add-ons checked"), what keeps the others from it and how many hosts could not be read; below
-  each host's name the same for that host ("2 of 3 add-ons checked · Cron Jobs: no access"). An
-  add-on that reports its checks counts as checked only when every check that applies ran fully
-  and in time; otherwise the line names the check ("Security Monitor: Container hardening partly
-  checked"). Not installed and No status are no gap there. A single entry in state Unknown is no
-  gap either, since add-ons use it for "nothing to rate" as well.
+- **Coverage:** above both tabs, how many of the add-ons the hosts are expected to have answered
+  in time with something rated ("6 of 9 expected add-ons checked"), what keeps the others from it,
+  how many hosts could not be read and how many have no target profile; below each host's name the
+  same for that host ("2 of 3 expected add-ons checked · Cron Jobs: no access"). An add-on that
+  reports its checks counts as checked only when every check that applies ran fully and in time;
+  otherwise the line names the check ("Security Monitor: Container hardening partly checked"). A
+  single entry in state Unknown is no gap, since add-ons use it for "nothing to rate" as well.
+- **Target profile:** what a host is expected to have comes from its own Host Settings, which sends
+  the host's roles, the add-ons and checks they expect, and the checks left out on purpose, each
+  with a reason and maybe an end date. The host's line shows its roles ("Role web"). An expected
+  add-on that is not installed there is a warning, "Update Gaps is missing" (the board cannot know
+  its package name, so it only says that the profile expects it); one installed in a version
+  without a status is a gap as well. A check the profile leaves out is not applicable until its end
+  date and counts nowhere. An add-on the profile does not expect counts in no figure, and its gaps
+  are softer: out of date, partly checked or failed are a notice, no access, not set up or not
+  supported are not rated, a status the board cannot read stays a warning. A host's profile
+  applies to that host's row only.
+- **Without a target profile** a host counts every installed add-on with a status as expected and
+  every other one as not expected, as before; its line and a notice in Needs attention say "No
+  target profile", never as a warning.
 - **Every entry of a tile:** "All 5 entries" opens what the add-on reports in a panel below the
   row, a table with each entry's name, value, label and detail. An entry with a place in the
   add-on opens it on a click (the Security Monitor's SSH, for example), not only the key figure's.
   The tiles of the row stay as they are, and open tiles stay open when the board loads again.
 - **Only what needs attention:** on the tab Hosts and coverage, a switch in the header leaves out
-  the tiles in OK, Unknown, Not installed and No status; a host left without tiles says "Nothing
-  that needs attention". The coverage stays. The browser keeps the choice.
+  the tiles in OK, Unknown, Not installed and No status (and the unrated ones of add-ons a host is
+  not expected to have); a host left without tiles says "Nothing that needs attention". The
+  coverage stays, and so do expected add-ons that are missing. The browser keeps the choice.
 - **Versions:** each tile names the add-on's version and says so when another host runs a newer
   one ("Version 0.2.0 runs on other hosts"), so a forgotten update shows.
 - **Current without you:** it loads on opening, on Refresh and every 5 minutes while the page is
@@ -122,7 +138,7 @@ tested system by itself.
 | | Systems | What is checked |
 |---|---|---|
 | **Tested** | Ubuntu 24.04 (GitHub runner) with Cockpit from Ubuntu's backports and `AllowMultiHost` on | the board in a real Cockpit (job `e2e`): the host list from the bridge, the other hosts over SSH (the runner itself under three names: with the key in the agent, with a locked key, on a closed port), one SSH connection per host for the board, Refresh and the shell, "Key locked", "Unreachable", the jumps into an add-on on this host and on another one, the tasks of those hosts and the tab in the shell's address |
-| **Tested** | Chromium, against a stand-in for Cockpit with Cockpit's CSP | the page with good, broken and hostile answers, the add-ons' real ones and answers with checks and findings, both tabs and their location, the tasks and their jumps, unreachable hosts, a locked key, a timeout, the reload every 5 minutes, English and German, dark, a phone (job `test`, `test/ui_test.py`) |
+| **Tested** | Chromium, against a stand-in for Cockpit with Cockpit's CSP | the page with good, broken and hostile answers, the add-ons' real ones and answers with checks and findings, hosts with and without a target profile, both tabs and their location, the tasks and their jumps, unreachable hosts, a locked key, a timeout, the reload every 5 minutes, English and German, dark, a phone (job `test`, `test/ui_test.py`) |
 | **Tested by hand** | a bastion with Cockpit 360 and three hosts behind it (Cockpit 360 and 362, Ubuntu 24.04 and 26.04), 2026-10-20 | the seven steps of [Trying it on the bastion](#trying-it-on-the-bastion) |
 | **Recorded** | Cron Jobs 2.9.0, Image Update Monitor 0.24.1, Update Gaps 0.6.0, Security Monitor 0.2.0 | their status answers in English and German (`test/fixtures/status/real-*.json`), read by the offline and the browser tests |
 | **Package installs** | Debian 13 (`.deb`), Fedora 43 (`.rpm`) (job `test`); Rocky Linux and AlmaLinux 9 and 10 (`.rpm`, for RHEL 9 and 10; job `install`) | the package installs with the distribution's own Cockpit and removes cleanly; no Cockpit runs there |
@@ -305,8 +321,9 @@ More in [CONTRIBUTING.md](CONTRIBUTING.md).
 - An answer of a status command may be 64 KiB at most: the board stops reading a longer one as soon
   as it passes that size, and the tile says so.
 - Versions are compared between the hosts only; the board does not look for new releases.
-- The board does not read a host's profile from Host Settings yet: every installed add-on with a
-  status counts as expected there, and one that is not installed is no gap.
+- A check that a target profile names (`security/exposure`) makes its add-on expected, but the
+  board judges coverage per add-on: a named check the add-on does not report at all is no gap of
+  its own.
 
 ## License
 

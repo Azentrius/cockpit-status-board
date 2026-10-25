@@ -761,14 +761,18 @@ t("coverageSummary of the board", () => {
 /* ---------- coverage from checks ---------- */
 
 /* The add-ons of the optional parts on three hosts, next to answers without them, and two hosts
-   that cannot be read: the scenario "tasks" of the browser tests. */
+   that cannot be read: the scenario "tasks" of the browser tests. Host Settings sends the same
+   profile on this host and on public-host (role web: the five add-ons, update-gaps/cve left out);
+   build-host has no Host Settings, so no target profile. */
 function suite(now) {
     return SB.buildBoard(SB.sortHosts([
         okHost("localhost", true, [["host-settings", "host-settings"], ["cronjobs", "cronjobs"]],
                { "host-settings": status("ext-good-host-settings.json"), cronjobs: status("good-cronjobs-ok.json") }, "vpn-host"),
-        okHost("public-host", false, [["cronjobs", "cronjobs"], ["image-updates", "image-updates"], ["security", "security"], ["update-gaps", "update-gaps"], ["system", "system"]],
+        okHost("public-host", false, [["cronjobs", "cronjobs"], ["image-updates", "image-updates"], ["security", "security"], ["update-gaps", "update-gaps"],
+                                      ["host-settings", "host-settings"], ["system", "system"]],
                { cronjobs: status("good-cronjobs-danger.json"), "image-updates": status("good-image-updates.json"),
-                 security: status("ext-good-security.json"), "update-gaps": status("ext-good-update-gaps.json") }),
+                 security: status("ext-good-security.json"), "update-gaps": status("ext-good-update-gaps.json"),
+                 "host-settings": status("ext-good-host-settings.json") }),
         okHost("build-host", false, [["cronjobs", "cronjobs"], ["image-updates", "image-updates"], ["system", "system"]],
                { cronjobs: { kind: "noaccess" }, "image-updates": status("good-image-updates-stale.json") }, "build-host (CI)"),
         { key: "old-host", own: false, label: "old-host", connection: "old-host", result: SB.reachOf({ problem: "no-host" }) },
@@ -818,18 +822,20 @@ t("checksCoverage: the order of the gaps, from partial to no access", () => {
 t("coverage from checks: the tiles, the rows and the board", () => {
     const rows = suite();
     const cov = key => row(rows, key).tiles.filter(x => x.coverage).map(x => [x.pkg, x.coverage, x.gapCheck ? x.gapCheck.id : null, x.gapChecks.map(c => c.id)]);
+    /* public-host's profile leaves out update-gaps/cve, which is not set up there: no gap */
     assert.deepStrictEqual(cov("public-host"), [
-        ["cronjobs", "checked", null, []], ["image-updates", "checked", null, []],
-        ["security", "partial", "containers", ["containers"]], ["update-gaps", "unconfigured", "cve", ["cve"]]]);
-    assert.deepStrictEqual(cov("localhost"), [["cronjobs", "checked", null, []], ["host-settings", "checked", null, []]]);
-    assert.deepStrictEqual(row(rows, "public-host").coverage, { total: 4, checked: 2, gaps: [
-        { pkg: "security", label: "Security Monitor", coverage: "partial", check: "Container hardening" },
-        { pkg: "update-gaps", label: "Update Gaps", coverage: "unconfigured", check: "Open CVEs (network data)" }] });
+        ["cronjobs", "checked", null, []], ["host-settings", "checked", null, []], ["image-updates", "checked", null, []],
+        ["security", "partial", "containers", ["containers"]], ["update-gaps", "checked", null, []]]);
+    /* this host sends the same profile: three of the five add-ons it expects are not installed */
+    assert.deepStrictEqual(cov("localhost"), [["cronjobs", "checked", null, []], ["host-settings", "checked", null, []],
+        ["image-updates", "missing", null, []], ["security", "missing", null, []], ["update-gaps", "missing", null, []]]);
+    assert.deepStrictEqual(row(rows, "public-host").coverage, { total: 5, checked: 4, gaps: [
+        { pkg: "security", label: "Security Monitor", coverage: "partial", check: "Container hardening" }] });
     assert.deepStrictEqual(row(rows, "build-host").coverage, { total: 2, checked: 0, gaps: [
         { pkg: "cronjobs", label: "Cron Jobs", coverage: "noaccess" }, { pkg: "image-updates", label: "Image Update Monitor", coverage: "stale" }] },
         "answers without checks as before, with no check named");
     assert.deepStrictEqual(SB.coverageSummary(rows), {
-        total: 8, checked: 4, gaps: { unchecked: 0, stale: 1, noaccess: 1, unreadable: 0, partial: 1, unconfigured: 1 }, unread: 2, unreadState: "danger" });
+        total: 12, checked: 6, gaps: { unchecked: 0, stale: 1, noaccess: 1, unreadable: 0, missing: 3, partial: 1 }, unread: 2, unreadState: "danger" });
     /* a single item in state none stays no gap: Security Monitor's containers counts through its check */
     assert.ok(row(rows, "public-host").tiles.find(x => x.pkg === "security").status.items.some(i => i.state === "none"));
     assert.strictEqual(row(rows, "public-host").tiles.find(x => x.pkg === "cronjobs").coverage, "checked", "Cron Jobs with an entry in none");
@@ -859,10 +865,13 @@ t("buildTasks: the order of the scenario (state, host not read, exposure, older 
         ["public-host/cronjobs/item:failed-runs", "item", "danger"],
         ["locked-host/locked", "host", "warning"],
         ["public-host/update-gaps/finding:restart.kernel", "finding", "warning"],
+        ["localhost/image-updates/coverage", "coverage", "warning"],
+        ["localhost/security/coverage", "coverage", "warning"],
+        ["localhost/update-gaps/coverage", "coverage", "warning"],
         ["build-host/cronjobs/coverage", "coverage", "warning"],
         ["build-host/image-updates/coverage", "coverage", "warning"],
         ["public-host/security/coverage", "coverage", "warning"],
-        ["public-host/update-gaps/coverage", "coverage", "warning"],
+        ["build-host/profile", "profile", "info"],
         ["public-host/image-updates/item:updates", "item", "info"],
     ]);
     m.tasks.forEach(x => assert.ok(x.host && x.tile && typeof x.title === "string", x.key));
@@ -891,9 +900,11 @@ t("buildTasks: items, summary only without any optional part", () => {
     assert.deepStrictEqual([runs.title, runs.item.value, runs.summaryOnly, runs.link, runs.evidence, runs.since, runs.isNew],
         ["Failed runs (24 h)", "2", true, "", { at: Date.UTC(2026, 9, 19, 18, 50, 3), complete: null }, null, false]);
     assert.ok(m.tasks.filter(x => x.kind === "item").every(x => x.summaryOnly), "Cron Jobs and Image Update Monitor send no optional part");
-    /* an answer with features, but nothing usable in them: its items are tasks, not summary only */
+    /* an answer with features, but nothing usable in them: its items are tasks, not summary only
+       (next to the notice that the host sends no target profile) */
     const rows = SB.buildBoard([okHost("a", true, [["cronjobs", "cronjobs"]], { cronjobs: status("ext-broken-shapes.json") })], NOW);
-    assert.deepStrictEqual(tasksOf(rows).tasks.map(x => [x.key, x.kind, x.state, x.summaryOnly]), [["a/cronjobs/item:y", "item", "warning", false]]);
+    assert.deepStrictEqual(tasksOf(rows).tasks.filter(x => x.kind !== "profile").map(x => [x.key, x.kind, x.state, x.summaryOnly]),
+        [["a/cronjobs/item:y", "item", "warning", false]]);
     /* an item a check owns: complete while the check is checked and in time */
     const owned = { kind: "ok", status: SB.validateStatus(JSON.stringify({ schema: 1, addon: "x", state: "warning", checked_at: "2026-10-19T18:00:00Z",
         features: ["checks"], checks: [{ id: "c", state: "partial", title: "C", item: "a", checked_at: "2026-10-19T18:40:00Z" }],
@@ -911,7 +922,11 @@ t("buildTasks: gaps in the coverage, from checks and from tiles", () => {
     assert.deepStrictEqual([sec.coverage, sec.check.id, sec.checks.map(c => c.id), sec.title, sec.link, sec.evidence],
         ["partial", "containers", ["containers"], "Container hardening", "#/containers", { at: Date.UTC(2026, 9, 19, 18, 50), complete: null }],
         "the check has no link: its item's");
-    const cve = gap("public-host/update-gaps/coverage");
+    /* Open CVEs, not set up, is no gap on public-host, whose profile leaves it out; on a host
+       without a profile it is one */
+    assert.strictEqual(gap("public-host/update-gaps/coverage"), undefined);
+    const bare = tasksOf(SB.buildBoard([okHost("public-host", false, [["update-gaps", "update-gaps"]], { "update-gaps": status("ext-good-update-gaps.json") })], NOW));
+    const cve = bare.tasks.find(x => x.key === "public-host/update-gaps/coverage");
     assert.deepStrictEqual([cve.coverage, cve.check.reason, cve.link, cve.evidence.at], ["unconfigured", "the network data are not set up", "", Date.UTC(2026, 9, 19, 18, 45)],
         "no link and no item: the add-on's start; no time: the answer's");
     const old = gap("build-host/image-updates/coverage");
@@ -932,8 +947,10 @@ t("buildTasks: accepted findings and checks that do not apply", () => {
     assert.deepStrictEqual(m.accepted.map(a => [a.key, a.finding.title, a.host.key, a.tile.pkg, a.until]),
         [["public-host/update-gaps/finding:held.postgresql-16", "postgresql-16 is held", "public-host", "update-gaps", Date.UTC(2026, 9, 30)]]);
     assert.ok(!m.tasks.some(x => x.key === "public-host/update-gaps/finding:held.postgresql-16"), "accepted is no task");
-    assert.deepStrictEqual(m.notApplicable.map(n => [n.host.key, n.tile.pkg, n.check.id, n.check.reason]),
-        [["public-host", "security", "fail2ban", "fail2ban is not installed"]]);
+    assert.deepStrictEqual(m.notApplicable.map(n => [n.host.key, n.tile.pkg, n.check.id, n.check.reason, n.check.byProfile || false]),
+        [["public-host", "security", "fail2ban", "fail2ban is not installed", false],
+         ["public-host", "update-gaps", "cve", "network data off on purpose", true]],
+        "what the add-on finds itself, and what the host's profile leaves out");
     /* in the morning both acceptances ran: no finding of Update Gaps is a task */
     const morning = tasksOf(suite(Date.UTC(2026, 9, 19, 11)), Date.UTC(2026, 9, 19, 11));
     assert.deepStrictEqual(morning.accepted.map(a => a.finding.fid), ["restart.kernel", "held.postgresql-16"], "soonest end first");
@@ -957,9 +974,13 @@ t("buildTasks: hosts that cannot be read, and the old fixtures", () => {
         ["evil-host/image-updates/coverage", "coverage", "warning"],
         ["public-host/update-gaps/item:held", "item", "warning"],
         ["public-host/update-gaps/item:reboot", "item", "warning"],
+        ["localhost/profile", "profile", "info"],
+        ["claw-host/profile", "profile", "info"],
+        ["evil-host/profile", "profile", "info"],
+        ["public-host/profile", "profile", "info"],
         ["public-host/image-updates/item:updates", "item", "info"],
         ["public-host/update-gaps/item:pro", "item", "info"],
-    ], "a host still loading has no task yet; not installed and no status are none");
+    ], "a host still loading has no task yet; not installed and no status are none; no host sends a profile: a notice for each one read");
     assert.deepStrictEqual(m.tasks.filter(x => x.kind === "coverage").map(x => x.coverage), ["noaccess", "unreadable", "unreadable", "unreadable"]);
     assert.deepStrictEqual([m.accepted, m.notApplicable], [[], []]);
     /* single entries in state none (jobs without records, roll-out) are no tasks */
@@ -988,14 +1009,14 @@ t("buildTasks: the order of findings within a state", () => {
     assert.deepStrictEqual(tasksOf(rows).tasks.map(x => x.key.replace(/^h\/x\/finding:/, "")), [
         "danger-local",
         "gone/locked", "internet-exploited", "internet-old", "internet-new", "internet-plain", "restricted", "internal", "local", "none-old",
-        "info-internet",
+        "info-internet", "h/profile",
     ], "a finding in OK is no task; no score: each step decides only on a tie of the one before");
 });
 
 t("buildTasks: an item whose findings say nothing open is a task of its own", () => {
     const answer = { kind: "ok", status: SB.validateStatus(JSON.stringify({ schema: 1, addon: "x", state: "warning", features: ["findings"],
         items: [{ id: "a", state: "warning", title: "A", findings: { complete: false, list: [{ fid: "f", state: "ok", title: "F" }] } }] }), "x").status };
-    const tasks = tasksOf(SB.buildBoard([okHost("h", true, [["x", "hostile-args"]], { x: answer })], NOW)).tasks;
+    const tasks = tasksOf(SB.buildBoard([okHost("h", true, [["x", "hostile-args"]], { x: answer })], NOW)).tasks.filter(x => x.kind !== "profile");
     assert.deepStrictEqual(tasks.map(x => [x.key, x.kind, x.summaryOnly]), [["h/x/item:a", "item", false]]);
 });
 
@@ -1008,6 +1029,241 @@ t("buildTasks: hostile findings stay data", () => {
     assert.deepStrictEqual(m.accepted, []);
     assert.strictEqual(m.tasks.find(x => x.kind === "finding" && x.finding.fid === "odd").link, "", "a link that leaves the page is none");
     assert.ok(({}).constructor === Object && Object.prototype.polluted === undefined);
+});
+
+/* ---------- a host's target profile ---------- */
+
+/* Host Settings' answer (ext-good-host-settings.json) with another profile; without one it sends none. */
+const hsWith = profile => {
+    const doc = json("status/ext-good-host-settings.json");
+    if (profile) doc.profile = profile;
+    else doc.features = ["checks"];
+    return { kind: "ok", status: SB.validateStatus(JSON.stringify(doc), "host-settings").status };
+};
+const HS = ["host-settings", "host-settings"];
+const tileOn = (rows, key, pkg) => row(rows, key).tiles.find(x => x.pkg === pkg);
+const brief = x => [x.pkg, x.kind, x.state, x.word, x.coverage, x.expected, x.gap];
+
+t("expectationOf: the expected add-ons and checks, and the skips that run", () => {
+    assert.strictEqual(SB.expectationOf(null, NOW), null);
+    const e = SB.expectationOf(ext("ext-good-host-settings.json").profile, NOW);
+    assert.deepStrictEqual([e.roles, Array.from(e.addons), Array.from(e.checks), Array.from(e.skips.keys())],
+        [["web"], ["host-settings", "update-gaps", "security", "cronjobs", "image-updates"], [], ["update-gaps/cve"]]);
+    const hostile = SB.expectationOf(ext("ext-hostile-profile.json").profile, NOW);
+    assert.deepStrictEqual([Array.from(hostile.addons), Array.from(hostile.checks)], [["security", "constructor"], ["security/exposure"]],
+        "a check makes its add-on expected; names every object has are plain names");
+    assert.deepStrictEqual(Array.from(hostile.skips.keys()), ["update-gaps/cve", "security/fail2ban"]);
+    const later = SB.expectationOf(ext("ext-hostile-profile.json").profile, Date.UTC(2026, 10, 1));
+    assert.deepStrictEqual(Array.from(later.skips.keys()), ["security/fail2ban"], "a skip ends on its until, at the board's clock; one without until stays");
+    const whole = SB.expectationOf({ roles: [], expect: [], skip: [{ check: "security", reason: "x", until: null }], setAt: null }, NOW);
+    assert.strictEqual(whole.skips.size, 0, "a skip names a check; an add-on alone leaves out nothing");
+});
+
+t("gapRating: expected gaps are warnings, optional ones softer", () => {
+    const cov = ["checked", "partial", "stale", "failed", "unconfigured", "noaccess", "unsupported", "unchecked", "unreadable", "missing", "notapplicable", null];
+    assert.deepStrictEqual(cov.map(c => SB.gapRating(c, true)),
+        [null, "warning", "warning", "warning", "warning", "warning", "warning", "warning", "warning", "warning", null, null]);
+    assert.deepStrictEqual(cov.map(c => SB.gapRating(c, false)),
+        [null, "info", "info", "info", null, null, null, null, "warning", null, null, null]);
+    assert.strictEqual(SB.gapRating("constructor", false), null, "only the coverages it knows");
+});
+
+t("profile: without one every installed add-on with a status entry is expected, and none other", () => {
+    const rows = board();
+    rows.forEach(r => r.tiles.filter(x => x.pkg).forEach(x =>
+        assert.strictEqual(x.expected, x.kind !== "missing" && x.kind !== "nostatus", r.host.key + "/" + x.pkg)));
+    assert.deepStrictEqual(rows.map(r => [r.host.key, r.profile, r.noProfile]), [
+        ["localhost", null, true], ["claw-host", null, true], ["dark-host", null, false], ["evil-host", null, true],
+        ["locked-host", null, false], ["new-host", null, false], ["old-host", null, false], ["public-host", null, true]],
+        "the notice only for hosts that could be read");
+    assert.deepStrictEqual(brief(tileOn(rows, "claw-host", "update-gaps")), ["update-gaps", "nostatus", "none", "nostatus", null, false, null]);
+    assert.deepStrictEqual(brief(tileOn(rows, "claw-host", "image-updates")), ["image-updates", "missing", "none", "missing", null, false, null]);
+    assert.deepStrictEqual(brief(tileOn(rows, "localhost", "image-updates")), ["image-updates", "noaccess", "warning", "noaccess", "noaccess", true, "warning"]);
+    /* nothing anywhere: no tiles, no notice */
+    assert.deepStrictEqual(SB.buildBoard([okHost("a", true, [["system", "system"]], {})], NOW).map(r => r.noProfile), [false]);
+});
+
+t("profile: Host Settings decides for its own host: expected, missing, not expected", () => {
+    const rows = suite();
+    assert.deepStrictEqual([row(rows, "localhost").profile.roles, row(rows, "public-host").profile.roles, row(rows, "build-host").profile],
+        [["web"], ["web"], null]);
+    assert.deepStrictEqual(row(rows, "localhost").tiles.map(brief), [
+        ["cronjobs", "status", "ok", "ok", "checked", true, null],
+        ["host-settings", "status", "ok", "ok", "checked", true, null],
+        ["image-updates", "missing", "warning", "absent", "missing", true, "warning"],
+        ["security", "missing", "warning", "absent", "missing", true, "warning"],
+        ["update-gaps", "missing", "warning", "absent", "missing", true, "warning"]]);
+    assert.ok(row(rows, "localhost").tiles.every(x => x.kind !== "missing" || x.jump === false), "a missing add-on opens nothing");
+    assert.ok(row(rows, "localhost").tiles.filter(x => x.kind === "missing").every(SB.notable), "and stays with only what needs attention");
+    assert.strictEqual(row(rows, "localhost").state, "warning");
+    /* the same tiles on build-host, which sends no profile: not installed, no gap */
+    assert.deepStrictEqual(["host-settings", "security", "update-gaps"].map(p => brief(tileOn(rows, "build-host", p))), [
+        ["host-settings", "missing", "none", "missing", null, false, null],
+        ["security", "missing", "none", "missing", null, false, null],
+        ["update-gaps", "missing", "none", "missing", null, false, null]], "a profile applies only to the row of the host that sends it");
+    assert.deepStrictEqual(row(rows, "localhost").coverage, { total: 5, checked: 2, gaps: [
+        { pkg: "image-updates", label: "Image Update Monitor", coverage: "missing" },
+        { pkg: "security", label: "Security Monitor", coverage: "missing" },
+        { pkg: "update-gaps", label: "Update Gaps", coverage: "missing" }] });
+    assert.deepStrictEqual(rows.map(r => r.noProfile), [false, true, false, false, false], "only build-host lacks a profile");
+});
+
+t("profile: another add-on's profile is not read, and a host does not decide for another", () => {
+    const fake = status("ext-good-security.json");
+    fake.status = Object.assign({}, fake.status, { profile: ext("ext-good-host-settings.json").profile });
+    const other = Object.assign(json("status/ext-good-host-settings.json"), { addon: "security" });
+    const rows = SB.buildBoard([
+        okHost("a", true, [["security", "security"], ["cronjobs", "cronjobs"]], { security: fake, cronjobs: status("good-cronjobs-ok.json") }),
+        okHost("b", false, [["security", "security"]], { security: { kind: "ok", status: SB.validateStatus(JSON.stringify(other), "security").status } }),
+        okHost("c", false, [HS], { "host-settings": hsWith({ roles: ["db"], expect: ["cronjobs", "security"], skip: [], set_at: "2026-10-19T09:00:00Z" }) }),
+    ], NOW);
+    assert.deepStrictEqual(rows.map(r => [r.host.key, r.profile ? r.profile.roles : null, r.noProfile]), [["a", null, true], ["b", null, true], ["c", ["db"], false]],
+        "only Host Settings' own answer counts, from no other add-on");
+    assert.ok(row(rows, "a").tiles.every(x => x.expected === (x.kind !== "missing")), "a: as without a profile");
+    assert.deepStrictEqual(brief(tileOn(rows, "a", "host-settings")), ["host-settings", "missing", "none", "missing", null, false, null]);
+    assert.deepStrictEqual(row(rows, "c").tiles.map(brief), [
+        ["cronjobs", "missing", "warning", "absent", "missing", true, "warning"],
+        ["host-settings", "status", "ok", "ok", "checked", false, null],
+        ["security", "missing", "warning", "absent", "missing", true, "warning"]], "c expects what it names; its own Host Settings is optional there");
+    assert.deepStrictEqual(row(rows, "c").coverage.total, 2, "only expected add-ons count");
+});
+
+t("profile: an expected add-on that no host reports gets a tile in that row only", () => {
+    const rows = SB.buildBoard([
+        okHost("a", true, [HS, ["system", "system"]], { "host-settings": status("ext-hostile-profile.json") }),
+        okHost("b", false, [["cronjobs", "cronjobs"]], { cronjobs: status("good-cronjobs-ok.json") }),
+    ], NOW);
+    assert.deepStrictEqual(row(rows, "a").tiles.map(x => [x.pkg, x.label, x.kind, x.word, x.coverage, x.jump]), [
+        ["constructor", "constructor", "missing", "absent", "missing", false],
+        ["cronjobs", "Cron Jobs", "missing", "missing", null, false],
+        ["host-settings", "Host Settings", "status", "ok", "checked", true],
+        ["security", "security", "missing", "absent", "missing", false]], "named by the package; a name every object has is a plain name");
+    assert.deepStrictEqual(row(rows, "b").tiles.map(x => [x.pkg, x.kind]), [["cronjobs", "status"], ["host-settings", "missing"]], "not on other hosts");
+    assert.ok(({}).constructor === Object && Object.prototype.polluted === undefined);
+    /* an expected package installed without a status entry (the board itself): nothing to judge */
+    const self = SB.buildBoard([okHost("a", true, [HS, ["status-board", "system"]],
+        { "host-settings": hsWith({ roles: ["bastion"], expect: ["host-settings", "status-board"], skip: [] }) })], NOW);
+    assert.deepStrictEqual(self[0].tiles.map(x => x.pkg), ["host-settings"]);
+    assert.deepStrictEqual(self[0].coverage, { total: 1, checked: 1, gaps: [] });
+});
+
+t("profile: expected in a version without the status entry is a gap; not expected it is not", () => {
+    const rows = SB.buildBoard([
+        okHost("a", true, [HS, ["update-gaps", "update-gaps-old"]], { "host-settings": hsWith({ roles: [], expect: ["update-gaps"], skip: [] }) }),
+        okHost("b", false, [HS, ["update-gaps", "update-gaps-old"], ["cronjobs", "cronjobs"]],
+               { "host-settings": hsWith({ roles: [], expect: ["cronjobs"], skip: [] }), cronjobs: status("good-cronjobs-ok.json") }),
+        okHost("c", false, [["update-gaps", "update-gaps"]], { "update-gaps": status("good-update-gaps.json") }),
+    ], NOW);
+    assert.deepStrictEqual(brief(tileOn(rows, "a", "update-gaps")), ["update-gaps", "nostatus", "warning", "nostatus", "unsupported", true, "warning"]);
+    assert.deepStrictEqual(brief(tileOn(rows, "b", "update-gaps")), ["update-gaps", "nostatus", "none", "nostatus", null, false, null]);
+    const gap = tasksOf(rows).tasks.find(x => x.key === "a/update-gaps/coverage");
+    assert.deepStrictEqual([gap.state, gap.coverage, gap.check, gap.evidence, gap.expected, gap.roles], ["warning", "unsupported", null, null, true, []]);
+});
+
+t("profile: gaps of add-ons the host is not expected to have are softer", () => {
+    const onlyHs = hsWith({ roles: ["build"], expect: ["host-settings"], skip: [] });
+    const rows = SB.buildBoard([okHost("a", true, [HS, ["cronjobs", "cronjobs"], ["image-updates", "image-updates"], ["security", "security"], ["update-gaps", "update-gaps"]], {
+        "host-settings": onlyHs, cronjobs: { kind: "noaccess" }, "image-updates": status("good-image-updates-stale.json"),
+        security: status("ext-good-security.json"), "update-gaps": { kind: "invalid", reason: "not-json", detail: null } })], NOW);
+    assert.deepStrictEqual(rows[0].tiles.map(brief), [
+        ["cronjobs", "noaccess", "none", "noaccess", "noaccess", false, null],
+        ["host-settings", "status", "ok", "ok", "checked", true, null],
+        ["image-updates", "status", "warning", "stale", "stale", false, "info"],
+        ["security", "status", "danger", "danger", "partial", false, "info"],
+        ["update-gaps", "error", "warning", "unreadable", "unreadable", false, "warning"]],
+        "no access unrated (a neutral tile), out of date and partly checked a notice, unreadable still a warning; the tile's own state stays");
+    assert.ok(!SB.notable(rows[0].tiles[0]), "an unrated tile leaves with only what needs attention");
+    assert.deepStrictEqual(rows[0].coverage, { total: 1, checked: 1, gaps: [] }, "the host's line counts the expected add-ons");
+    const m = tasksOf(rows);
+    assert.deepStrictEqual(m.tasks.filter(x => x.kind === "coverage").map(x => [x.key, x.state, x.coverage, x.expected, x.roles]), [
+        ["a/update-gaps/coverage", "warning", "unreadable", false, ["build"]],
+        ["a/image-updates/coverage", "info", "stale", false, ["build"]],
+        ["a/security/coverage", "info", "partial", false, ["build"]]]);
+    assert.ok(m.tasks.some(x => x.key === "a/security/finding:port.5432-tcp" && x.state === "danger"), "its findings stay tasks as they are");
+    /* an answer that rates nothing, and checks that failed or are not set up */
+    const quiet = SB.buildBoard([okHost("a", true, [HS, ["image-updates", "image-updates"], ["update-gaps", "update-gaps"]], {
+        "host-settings": onlyHs, "image-updates": status("good-minimal.json"), "update-gaps": status("ext-good-update-gaps.json") })], NOW);
+    assert.deepStrictEqual(quiet[0].tiles.filter(x => x.pkg !== "host-settings").map(brief), [
+        ["image-updates", "status", "none", "unchecked", "unchecked", false, null],
+        ["update-gaps", "status", "warning", "warning", "unconfigured", false, null]]);
+    assert.deepStrictEqual(tasksOf(quiet).tasks.filter(x => x.kind === "coverage"), []);
+    const failed = { kind: "ok", status: SB.validateStatus(JSON.stringify({ schema: 1, addon: "security", state: "ok", features: ["checks"],
+        checks: [{ id: "a", state: "noaccess", title: "A" }, { id: "b", state: "failed", title: "B" }], items: [{ id: "x", state: "ok", title: "X" }] }), "security").status };
+    const worst = SB.buildBoard([okHost("a", true, [HS, ["security", "security"]], { "host-settings": onlyHs, security: failed })], NOW)[0].tiles[1];
+    assert.deepStrictEqual([worst.coverage, worst.gapCheck.id, worst.gap], ["noaccess", "a", "info"], "a notice of one check is not hidden by an unrated worse one");
+});
+
+t("profile: a skip makes its check not applicable while it runs, at the board's clock", () => {
+    const until = Date.UTC(2026, 9, 20);
+    const profile = { roles: ["web"], expect: ["host-settings", "update-gaps", "security"],
+        skip: [{ check: "update-gaps/cve", reason: "network data off on purpose", until: "2026-10-20T00:00:00Z" },
+               { check: "security/fail2ban", reason: "CrowdSec instead" }] };
+    const at = now => SB.buildBoard([okHost("a", true, [HS, ["update-gaps", "update-gaps"], ["security", "security"]], {
+        "host-settings": hsWith(profile), "update-gaps": status("ext-good-update-gaps.json"), security: status("ext-good-security.json") })], now);
+    const before = at(NOW);
+    const gaps = tileOn(before, "a", "update-gaps");
+    assert.deepStrictEqual([gaps.coverage, gaps.gap, gaps.status.checks.map(c => [c.id, c.state, c.reason, c.byProfile || false, c.until === undefined ? "-" : c.until])],
+        ["checked", null, [["held", "checked", null, false, "-"], ["restart", "checked", null, false, "-"], ["cve", "notapplicable", "network data off on purpose", true, until]]]);
+    assert.strictEqual(ext("ext-good-update-gaps.json").checks[2].state, "unconfigured", "the add-on's answer itself stays as it is");
+    const fail2ban = tileOn(before, "a", "security").status.checks.find(c => c.id === "fail2ban");
+    assert.deepStrictEqual([fail2ban.reason, fail2ban.byProfile], ["fail2ban is not installed", undefined], "what the add-on finds itself stays its own");
+    const m = tasksOf(before);
+    assert.ok(!m.tasks.some(x => x.key === "a/update-gaps/coverage"), "a skipped check is no gap");
+    assert.deepStrictEqual(m.notApplicable.map(n => [n.tile.pkg, n.check.id, n.check.reason, n.check.byProfile || false]),
+        [["security", "fail2ban", "fail2ban is not installed", false], ["update-gaps", "cve", "network data off on purpose", true]]);
+    /* on the day the skip ends the check counts again */
+    const after = at(until);
+    assert.deepStrictEqual([tileOn(after, "a", "update-gaps").coverage, tileOn(after, "a", "update-gaps").gap], ["unconfigured", "warning"]);
+    assert.ok(tasksOf(after, until).tasks.some(x => x.key === "a/update-gaps/coverage" && x.state === "warning"));
+    assert.strictEqual(at(until - 1)[0].tiles.find(x => x.pkg === "update-gaps").coverage, "checked", "a moment before it still runs");
+});
+
+t("profile: a check in expect makes its add-on expected", () => {
+    const rows = SB.buildBoard([
+        okHost("a", true, [HS, ["security", "security"]], { "host-settings": hsWith({ roles: ["web"], expect: ["security/exposure"], skip: [] }),
+                                                            security: status("ext-good-security.json") }),
+        okHost("b", false, [HS], { "host-settings": hsWith({ roles: ["web"], expect: ["security/exposure"], skip: [] }) }),
+    ], NOW);
+    assert.deepStrictEqual(brief(tileOn(rows, "a", "security")), ["security", "status", "danger", "danger", "partial", true, "warning"],
+        "expected: its gap is a warning, not a notice");
+    assert.deepStrictEqual(brief(tileOn(rows, "b", "security")), ["security", "missing", "warning", "absent", "missing", true, "warning"]);
+    assert.deepStrictEqual(brief(tileOn(rows, "a", "host-settings")), ["host-settings", "status", "ok", "ok", "checked", false, null]);
+    assert.deepStrictEqual(rows.map(r => r.coverage), [
+        { total: 1, checked: 0, gaps: [{ pkg: "security", label: "Security Monitor", coverage: "partial", check: "Container hardening" }] },
+        { total: 1, checked: 0, gaps: [{ pkg: "security", label: "Security Monitor", coverage: "missing" }] }]);
+});
+
+t("buildTasks: an expected add-on that is missing", () => {
+    const m = tasksOf(suite());
+    const gap = m.tasks.find(x => x.key === "localhost/security/coverage");
+    assert.deepStrictEqual([gap.kind, gap.state, gap.title, gap.coverage, gap.check, gap.checks, gap.link, gap.evidence, gap.expected, gap.roles, gap.tile.jump],
+        ["coverage", "warning", "", "missing", null, [], null, null, true, ["web"], false]);
+    assert.deepStrictEqual(m.tasks.filter(x => x.kind === "coverage" && x.roles).map(x => [x.key, x.expected]), [
+        ["localhost/image-updates/coverage", true], ["localhost/security/coverage", true], ["localhost/update-gaps/coverage", true],
+        ["public-host/security/coverage", true]], "the gaps of hosts with a profile carry its roles");
+});
+
+t("buildTasks: the notice of a host without a target profile", () => {
+    const m = tasksOf(suite());
+    const notice = m.tasks.filter(x => x.kind === "profile");
+    assert.deepStrictEqual(notice.map(x => [x.key, x.state, x.title, x.host.key, x.tile.kind, x.tile.jump, x.pkg, x.link, x.evidence]),
+        [["build-host/profile", "info", "", "build-host", "profile", false, null, null, null]], "never a warning; without Host Settings nothing to open");
+    /* Host Settings installed in a version without the profile: the notice opens it */
+    const rows = SB.buildBoard([okHost("a", true, [HS, ["cronjobs", "cronjobs"]], { "host-settings": hsWith(null), cronjobs: status("good-cronjobs-ok.json") })], NOW);
+    const own = tasksOf(rows).tasks.filter(x => x.kind === "profile");
+    assert.deepStrictEqual(own.map(x => [x.key, x.tile.pkg, x.tile.jump, x.pkg, x.link]), [["a/profile", "host-settings", true, "host-settings", ""]]);
+    assert.deepStrictEqual(rows[0].coverage, { total: 2, checked: 2, gaps: [] }, "without a profile as before");
+    assert.deepStrictEqual(tasksOf(SB.buildBoard([okHost("a", true, [["system", "system"]], {})], NOW)).tasks, [], "no notice where the board shows nothing");
+});
+
+t("coverageSummary: only expected add-ons count", () => {
+    assert.deepStrictEqual(SB.coverageSummary(suite()), {
+        total: 12, checked: 6, gaps: { unchecked: 0, stale: 1, noaccess: 1, unreadable: 0, missing: 3, partial: 1 }, unread: 2, unreadState: "danger" });
+    const onlyHs = hsWith({ roles: [], expect: ["host-settings"], skip: [] });
+    const rows = SB.buildBoard([okHost("a", true, [HS, ["cronjobs", "cronjobs"], ["image-updates", "image-updates"]],
+        { "host-settings": onlyHs, cronjobs: { kind: "noaccess" }, "image-updates": status("good-image-updates-stale.json") })], NOW);
+    assert.deepStrictEqual(SB.coverageSummary(rows), { total: 1, checked: 1, gaps: { unchecked: 0, stale: 0, noaccess: 0, unreadable: 0 }, unread: 0, unreadState: "none" },
+        "add-ons the host is not expected to have are no gap of the board's coverage");
 });
 
 t("buildBoard: a tile says when another host runs a newer version", () => {

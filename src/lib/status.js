@@ -518,8 +518,48 @@
 
     /* Whether a tile needs attention: a notice, a warning or a problem (out of date included), or
        a host still loading. OK, Unknown, Not installed and No status do not. No access and an
-       answer that rates nothing are warnings (gaps in what the board knows), so they do. */
+       answer that rates nothing are warnings (gaps in what the board knows), so they do, unless
+       the host's profile does not expect the add-on; so does an expected add-on that is missing. */
     const notable = tile => tile.kind === "loading" || rank(tile.state) >= RANK.info;
+
+    /* ---------- a host's target profile ---------- */
+
+    /* The add-on that sends a host's profile; validateExtension() reads it from no other. */
+    const PROFILE_ADDON = "host-settings";
+
+    /* What a host is expected to have, from its profile at the time now (ms), or null without one:
+         roles   the profile's roles, as it sends them
+         addons  the expected add-ons: every add-on of `expect`, and the add-on of every check in it
+         checks  the checks `expect` names ("security/exposure")
+         skips   the checks left out on purpose whose `until` has not passed (none: for good), by
+                 "addon/check"; an entry that names an add-on alone leaves out nothing */
+    function expectationOf(profile, now) {
+        if (!profile) return null;
+        const addons = new Set();
+        const checks = new Set();
+        profile.expect.forEach(e => {
+            const at = e.indexOf("/");
+            addons.add(at < 0 ? e : e.slice(0, at));
+            if (at >= 0) checks.add(e);
+        });
+        const skips = new Map();
+        profile.skip.forEach(s => {
+            if (s.check.indexOf("/") >= 0 && (s.until === null || s.until > now)) skips.set(s.check, s);
+        });
+        return { roles: profile.roles, addons, checks, skips };
+    }
+
+    /* How a gap of the coverage counts (the table "Coverage" in docs/INTERNALS.md): for an add-on
+       the host is expected to have always a warning; for one it is not expected to have a notice
+       where something ran and is incomplete (partial, stale, failed), a warning where nothing can
+       be read (unreadable), else nothing (unconfigured, noaccess, unsupported, unchecked). null for
+       no gap (checked, or no coverage at all). */
+    const OPTIONAL_GAP = { partial: "info", stale: "info", failed: "info", unreadable: "warning" };
+    function gapRating(coverage, expected) {
+        if (!coverage || coverage === "checked" || coverage === "notapplicable") return null;
+        if (expected) return "warning";
+        return own(OPTIONAL_GAP, coverage) ? OPTIONAL_GAP[coverage] : null;
+    }
 
     /* The gaps a check can show, worst first (contract, "Checks and coverage"); a check that is
        "checked" and in time shows none, one that is "notapplicable" does not count. */
@@ -557,12 +597,17 @@
          noaccess      nothing readable without administrative access (exit 77, or a check in
                        state noaccess)
          unreadable    no usable answer (Status unreadable, Command refused)
-         partial, failed, unconfigured, unsupported
+         partial, failed, unconfigured
                        only from checks: the state of the worst check
+         unsupported   from checks, or an expected add-on installed in a version without the
+                       status entry (No status)
+         missing       an expected add-on that is not installed
        An answer with checks takes the worst of its checks that apply (checksCoverage()); an answer
-       without them is judged by its tile as before.
-       null for a tile that is no installed add-on with a status entry (Not installed, No status)
-       and for a host that cannot be read: no check of an add-on is missing there.
+       without them is judged by its tile as before. tile.expected says whether the host is
+       expected to have the add-on (buildBoard()).
+       null for a tile that is no installed add-on with a status entry and not expected either (Not
+       installed, No status) and for a host that cannot be read: no check of an add-on is missing
+       there.
        A single item in state none is no gap: add-ons use none for "nothing to rate" as well (Cron
        Jobs' jobs without recording, Image Update Monitor's rollout), so contract version 1 cannot
        tell it from "could not check"; only a check in state partial says that. */
@@ -576,22 +621,26 @@
         case "noaccess": return "noaccess";
         case "error":
         case "rejected": return "unreadable";
+        case "missing": return tile.expected ? "missing" : null;
+        case "nostatus": return tile.expected ? "unsupported" : null;
         default: return null;
         }
     }
 
-    /* The coverage of the whole board: how many add-ons with a status entry the hosts that could be
-       read have (total), how many of them answered in time with something rated (checked), the
-       others by coverage (gaps: the four kinds of answers without checks always, partial, failed,
-       unconfigured and unsupported once one of them occurs), and how many hosts could not be read
-       at all (unread: unreachable, locked key, find failed; hosts still loading do not count). */
+    /* The coverage of the whole board: how many add-ons the hosts that could be read are expected
+       to have (total; without a profile every installed add-on with a status entry), how many of
+       them answered in time with something rated (checked), the others by coverage (gaps: the four
+       kinds of answers without checks always, missing, partial, failed, unconfigured and
+       unsupported once one of them occurs), and how many hosts could not be read at all (unread:
+       unreachable, locked key, find failed; hosts still loading do not count). An add-on a host
+       is not expected to have does not count here. */
     function coverageSummary(rows) {
         const out = { total: 0, checked: 0, gaps: { unchecked: 0, stale: 0, noaccess: 0, unreadable: 0 }, unread: 0, unreadState: "none" };
         rows.forEach(row => row.tiles.forEach(t => {
             if (t.kind === "unreachable" || t.kind === "locked" || t.kind === "discovery") {
                 out.unread++;
                 out.unreadState = worse(out.unreadState, t.state);
-            } else if (t.coverage) {
+            } else if (t.coverage && t.expected) {
                 out.total++;
                 if (t.coverage === "checked") out.checked++;
                 else out.gaps[t.coverage] = (out.gaps[t.coverage] || 0) + 1;
@@ -631,13 +680,24 @@
                   { reach: "locked", identity }               (the SSH key in the agent is locked)
                   { reach: "ok", discovery: "failed", message }
                   { reach: "ok", discovery: "ok", packages: packagesOf(…), results: { pkg: result } }
-       Returns [{ host, state, tiles, coverage }]: every tile carries its coverage (coverageOf()),
-       and for an answer with checks the check that shows a gap (gapCheck, or null) and every check
-       with a gap (gapChecks, else []); the row's coverage is
-       { total, checked, gaps: [{ pkg, label, coverage, check? }] } or null.
+       Returns [{ host, state, tiles, coverage, profile, noProfile }]: every tile carries its
+       coverage (coverageOf()), whether the host is expected to have the add-on (expected), how a
+       gap counts (gap: gapRating(), or null), and for an answer with checks the check that shows a
+       gap (gapCheck, or null) and every check with a gap (gapChecks, else []); the row's coverage
+       is { total, checked, gaps: [{ pkg, label, coverage, check? }] } over the expected add-ons,
+       or null.
        An add-on with a status entry on one host gets a tile on every host it could be read
        from: "missing" where the package is not installed, "nostatus" where it is, in a version
        without the status entry.
+       Profile: a host's own Host Settings may send its target profile (profile, else null); it
+       decides for that host's row only. With it the expected add-ons are those of
+       expectationOf(); a check it leaves out (skips) is "notapplicable" in that row, with the
+       profile's reason (byProfile, until; tile.status is then a copy with those checks); an
+       expected add-on no host reports gets a "missing" tile in that row only, named by its
+       package. Without a profile every installed add-on with a status entry is expected and none
+       other; noProfile is true for a host that could be read while the board has tiles.
+       Expected and missing, or installed in a version without the status entry, the tile is a
+       warning; not expected, No access and an answer that rates nothing are not rated (none).
        Names: a tile carries the label its own host sends (else the one of its manifest), so a
        host can name only its own tiles. Tiles are sorted, and "missing" tiles named, by the label
        of the first host that has one, this host first.
@@ -664,18 +724,31 @@
             });
         });
         labels.forEach((label, pkg) => { if (!label) labels.set(pkg, pkg); });
+        /* The profile of a host that could be read: only what its own Host Settings sends. */
+        const profileOn = r => {
+            const res = resultOf(r, PROFILE_ADDON);
+            return res && res.kind === "ok" && res.status.addon === PROFILE_ADDON && res.status.profile ? res.status.profile : null;
+        };
 
         const rows = hosts.map(host => {
             const r = host.result;
             let tiles;
+            let profile = null;
+            let expect = null;
             if (r.reach === "loading") tiles = [{ kind: "loading", state: "none", word: null, jump: false }];
             else if (r.reach === "unreachable") tiles = [{ kind: "unreachable", state: "danger", word: "unreachable", jump: "host", problem: r.problem, message: r.message }];
             else if (r.reach === "locked") tiles = [{ kind: "locked", state: "warning", word: "locked", jump: "host", identity: r.identity }];
             else if (r.discovery !== "ok") tiles = [{ kind: "discovery", state: "warning", word: "discovery", jump: false, message: r.message }];
             else {
-                tiles = Array.from(labels.keys()).map(pkg => {
+                profile = profileOn(r);
+                expect = expectationOf(profile, now);
+                const pkgs = Array.from(labels.keys());
+                /* an add-on the profile expects that no host reports: a tile in this row only (one
+                   installed here without a status entry has nothing to judge) */
+                if (expect) expect.addons.forEach(pkg => { if (!labels.has(pkg) && !pkgOf(r, pkg)) pkgs.push(pkg); });
+                tiles = pkgs.map(pkg => {
                     const p = pkgOf(r, pkg);
-                    const sortLabel = labels.get(pkg);
+                    const sortLabel = labels.get(pkg) || pkg;
                     const label = nameOn(r, pkg) || sortLabel;
                     if (!p) return { pkg, label, sortLabel, kind: "missing", state: "none", word: "missing", jump: false };
                     if (!p.entry) return { pkg, label, sortLabel, kind: "nostatus", state: "none", word: "nostatus", jump: true };
@@ -684,23 +757,41 @@
                     return tileOf(pkg, label, sortLabel, resultOf(r, pkg) || { kind: "failed", exit: null, message: null }, now);
                 }).sort(byName);
             }
-            const state = tiles.reduce((s, t) => worse(s, t.state), "none");
             tiles.forEach(t => {
+                t.expected = !t.pkg ? false : expect ? expect.addons.has(t.pkg) : t.kind !== "missing" && t.kind !== "nostatus";
+                if (t.expected && t.kind === "missing") Object.assign(t, { state: "warning", word: "absent" });
+                else if (t.expected && t.kind === "nostatus") t.state = "warning";
+                else if (!t.expected && (t.kind === "noaccess" || t.word === "unchecked")) t.state = "none";
+                if (expect && t.kind === "status" && Array.isArray(t.status.checks) &&
+                    t.status.checks.some(c => c.state !== "notapplicable" && expect.skips.has(t.pkg + "/" + c.id))) {
+                    t.status = Object.assign({}, t.status, { checks: t.status.checks.map(c => {
+                        const s = c.state !== "notapplicable" ? expect.skips.get(t.pkg + "/" + c.id) : null;
+                        return s ? Object.assign({}, c, { state: "notapplicable", reason: s.reason, byProfile: true, until: s.until }) : c;
+                    }) });
+                }
                 const fromChecks = t.kind === "status" ? checksCoverage(t.status, now) : null;
                 t.coverage = coverageOf(t, now);
                 t.gapCheck = fromChecks ? fromChecks.worst : null;
                 t.gapChecks = fromChecks ? fromChecks.gaps : [];
+                /* with checks, the gap counts as its worst check would (a notice of a partial check
+                   is not hidden by an unrated one) */
+                const rated = !t.coverage || t.coverage === "checked" ? "none" : t.expected ? "warning"
+                    : fromChecks ? fromChecks.gaps.reduce((s, c) => worse(s, gapRating(c.coverage, false) || "none"), "none")
+                    : gapRating(t.coverage, false) || "none";
+                t.gap = rated === "none" ? null : rated;
             });
-            const covered = tiles.filter(t => t.coverage);
-            /* null where no add-on with a status entry could be read (the host's tile says why); a
-               gap that comes from a check names it (check: its title) */
+            const state = tiles.reduce((s, t) => worse(s, t.state), "none");
+            const covered = tiles.filter(t => t.coverage && t.expected);
+            /* null where no expected add-on could be read (the host's tile says why); a gap that
+               comes from a check names it (check: its title) */
             const coverage = covered.length ? {
                 total: covered.length,
                 checked: covered.filter(t => t.coverage === "checked").length,
                 gaps: covered.filter(t => t.coverage !== "checked").map(t =>
                     Object.assign({ pkg: t.pkg, label: t.label, coverage: t.coverage }, t.gapCheck ? { check: t.gapCheck.title } : {})),
             } : null;
-            return { host, state, tiles, coverage };
+            const noProfile = r.reach === "ok" && r.discovery === "ok" && !profile && tiles.length > 0;
+            return { host, state, tiles, coverage, profile, noProfile };
         });
 
         const versioned = [].concat(...rows.map(row => row.tiles))
@@ -750,11 +841,19 @@
                             without findings, or none of its findings is open or accepted);
                             summaryOnly when the add-on sends no optional part at all
            kind "coverage"  a gap in the coverage of an add-on of a host that could be read
-                            (coverageOf(): from its checks or from its tile), always a warning
+                            (coverageOf(): from its checks or from its tile), as tile.gap rates
+                            it: a warning for an expected add-on, missing ones included, a notice
+                            or a warning for one the host's profile does not expect, nothing for
+                            an unrated gap; expected (tile.expected) and roles (the profile's, or
+                            null without one) say why
+           kind "profile"   a host that could be read sends no target profile (row.noProfile),
+                            a notice; tile is its Host Settings where installed, else one that
+                            opens nothing
            kind "host"      a host that cannot be read (Unreachable, Key locked, Add-ons
                             unreadable), in the state of its tile
          accepted       the findings in state info or worse whose acceptance runs, soonest end first
-         notApplicable  the checks in state notapplicable, with their reason
+         notApplicable  the checks in state notapplicable, with their reason (check.byProfile and
+                        check.until for one the host's profile leaves out)
        Every task carries host, tile (for the jump), key (unique on the board), state, title (a
        text of the host, or "" where the page names it), since (or null), isNew (since less than a
        day ago), exposure, exploited and fix (findings only, else null), link (the place in the
@@ -768,7 +867,8 @@
         const tasks = [];
         const accepted = [];
         const notApplicable = [];
-        rows.forEach((row, hostIndex) => row.tiles.forEach(tile => {
+        /* the tasks of one tile of a row */
+        function tileTasks(row, hostIndex, tile) {
             const host = row.host;
             const base = { host, tile, hostIndex, sortLabel: tile.sortLabel || "", pkg: tile.pkg || null, since: null, isNew: false,
                            exposure: null, exploited: null, fix: null, link: null, evidence: null };
@@ -784,10 +884,10 @@
                 const item = items.find(i => i.id === id);
                 return item ? item.link : null;
             };
-            if (tile.coverage !== "checked") {
+            if (tile.gap) {
                 const check = tile.gapCheck;
-                add({ kind: "coverage", key: host.key + "/" + tile.pkg + "/coverage", state: "warning", title: check ? check.title : "",
-                      coverage: tile.coverage, check, checks: tile.gapChecks,
+                add({ kind: "coverage", key: host.key + "/" + tile.pkg + "/coverage", state: tile.gap, title: check ? check.title : "",
+                      coverage: tile.coverage, check, checks: tile.gapChecks, expected: tile.expected, roles: row.profile ? row.profile.roles : null,
                       link: check ? check.link || (check.item !== null ? linkOfItem(check.item) : null) || "" : null,
                       evidence: st ? { at: check && check.checkedAt !== null ? check.checkedAt : tile.eval.checkedAt, complete: null } : null });
             }
@@ -819,7 +919,18 @@
                       link: item.link || "",
                       evidence: at !== null ? { at, complete: check ? checkCoverage(check, now).coverage === "checked" : null } : null });
             });
-        }));
+        }
+        rows.forEach((row, hostIndex) => {
+            if (row.noProfile) {
+                /* first among the host's tasks of its state: no add-on, no title of a host */
+                const hs = row.tiles.find(t => t.pkg === PROFILE_ADDON && t.kind !== "missing") || null;
+                tasks.push({ kind: "profile", key: row.host.key + "/profile", state: "info", title: "", host: row.host,
+                             tile: hs || { kind: "profile", pkg: null, label: null, sortLabel: "", jump: false }, hostIndex, sortLabel: "",
+                             pkg: hs ? hs.pkg : null, since: null, isNew: false, exposure: null, exploited: null, fix: null,
+                             link: hs ? "" : null, evidence: null });
+            }
+            row.tiles.forEach(tile => tileTasks(row, hostIndex, tile));
+        });
         tasks.sort(compareTasks);
         accepted.sort((a, b) => a.until - b.until || a.hostIndex - b.hostIndex || byText(a.tile.sortLabel, b.tile.sortLabel) ||
             byText(a.finding.title, b.finding.title));
@@ -856,7 +967,7 @@
         validateStatus, stateOfItems, itemState, evaluate, classifyFailure, outputCollector,
         packageOfManifestPath, statusEntry, menuLabel, statusArgv, packagesOf,
         connectionString, parseMachines, buildBoard, sortHosts, reachOf, compareVersions, notable,
-        coverageOf, coverageSummary, checksCoverage, buildTasks,
+        coverageOf, coverageSummary, checksCoverage, buildTasks, expectationOf, gapRating,
     };
     if (typeof module === "object" && module.exports) module.exports = api;
     else root.StatusBoard = api;

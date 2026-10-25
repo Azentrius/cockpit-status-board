@@ -39,11 +39,12 @@
         version: v => `Version ${v}`,
         newerElsewhere: v => `Version ${v} runs on other hosts`,
         coverage: "Coverage",
-        coverageCount: (n, total) => `${n} of ${total} add-ons checked`,
+        coverageCount: (n, total) => `${n} of ${total} expected add-ons checked`,
         coverageGap: (n, word) => `${n} ${word}`,
         coverageHosts: n => (n === 1 ? "1 host not read" : `${n} hosts not read`),
+        coverageNoProfile: n => (n === 1 ? "1 host without a target profile" : `${n} hosts without a target profile`),
         coverageComplete: "Complete",
-        hostCoverage: (n, total) => `${n} of ${total} add-ons checked`,
+        hostCoverage: (n, total) => `${n} of ${total} expected add-ons checked`,
         /* What keeps an add-on from counting as checked (lib/status.js, coverageOf). */
         coverageWords: {
             unchecked: "nothing checked",
@@ -54,7 +55,14 @@
             failed: "check failed",
             unconfigured: "not set up",
             unsupported: "not supported",
+            missing: "not installed",
         },
+        /* The target profile that Host Settings sends for its host: its roles, or none. */
+        role: name => `Role ${name}`,
+        noProfile: "No target profile",
+        noProfileText: "Without a target profile every installed add-on counts as expected, so one that is missing does not show. Host Settings sets the profile on each host.",
+        missingTitle: name => `${name} is missing`,
+        missingExpectedText: "Not installed on this host, although its profile expects it.",
         /* The check that shows a gap, after the add-on's name: "Security Monitor: Container
            hardening partly checked". */
         checkGap: {
@@ -76,6 +84,9 @@
             fix: "fix available",
             summary: "summary only",
             unknown: "findings unknown",
+            /* a gap on a host with a target profile: n roles, their names */
+            expected: (n, roles) => (n ? `expected for ${n === 1 ? "role" : "roles"} ${roles}` : "expected by the target profile"),
+            optional: "not expected here",
         },
         factSince: "Since",
         factEvidence: "Evidence",
@@ -88,6 +99,8 @@
             finding: "a complete check no longer finds it",
             item: "the add-on rates the entry OK again",
             coverage: "the add-on answers in time, with every check complete",
+            missing: "the add-on is installed on this host and answers in time",
+            profile: "Host Settings sends a target profile for this host",
             host: "the board can read the host again",
         },
         openIn: name => `Open in ${name}`,
@@ -101,6 +114,13 @@
         colUntil: "Accepted until",
         colCheck: "Check",
         colReason: "Reason",
+        colSetBy: "Set by",
+        /* who left a check out */
+        setBy: {
+            addon: "Add-on",
+            profile: "Target profile",
+            until: t => `Target profile, until ${t}`,
+        },
         tasksEmptyTitle: "Nothing needs attention",
         tasksEmptyBody: "No add-on reports anything that needs attention, and every host and add-on could be read in time. That means the add-ons found nothing in what they check, not that the hosts are safe.",
 
@@ -114,6 +134,7 @@
             stale: "Out of date",
             unchecked: "Not checked",
             missing: "Not installed",
+            absent: "Missing",
             nostatus: "No status",
             noaccess: "No access",
             unreadable: "Status unreadable",

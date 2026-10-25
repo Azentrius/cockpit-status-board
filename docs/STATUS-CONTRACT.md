@@ -146,9 +146,9 @@ host is expected to check (`profile`, from Host Settings only). Old boards and o
 them (`schema` stays `1`). An add-on names the parts it sends in `features`; a part it does not
 name is not read. What breaks the rules below is left out and counted, it never makes the answer
 unreadable. The board checks them (`validateStatus()`, `test/fixtures/status/ext-*.json`), lets
-open findings count for an item's state (below), takes an add-on's coverage from its checks and
-lists open findings as tasks ([INTERNALS.md](INTERNALS.md), "Needs attention"); it does not read
-the profile yet.
+open findings count for an item's state (below), takes an add-on's coverage from its checks, lists
+open findings as tasks ([INTERNALS.md](INTERNALS.md), "Needs attention") and takes from a host's
+profile what that host is expected to have ([INTERNALS.md](INTERNALS.md), "Expectation").
 
 ```json
 {
@@ -231,6 +231,15 @@ add-ons use `none` for "nothing to rate" as well.
 
 **A host's profile.** Host Settings sends what its host is expected to check: roles, the add-ons
 and checks they expect, and checks left out on purpose. It names only its own host.
+
+- `expect` is already resolved from the roles. An add-on (`security`) is expected with every check
+  it runs; a check (`security/exposure`) makes its add-on expected as well. Names are package
+  folders, as in `addon`.
+- A skip names a check as `addon/check`; one that names an add-on alone leaves out nothing. It
+  holds until the day of its `until`, read at the board's clock, or for good without one.
+- The board counts an expected add-on that is not installed as missing (a warning), and rates the
+  gaps of an add-on the profile does not expect lower. Without a profile every installed add-on
+  with a status entry counts as expected, and the host is marked as having none.
 
 ## Optional: a state in Cockpit's menu
 

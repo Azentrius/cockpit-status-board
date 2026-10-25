@@ -22,8 +22,10 @@
  * add-on; "Hosts and coverage" is the board of rows and tiles. A tile folds out every entry of its
  * answer, each opening its own place in the add-on; a switch on that tab shows only what needs
  * attention (kept in the browser), and a tile says when the same add-on runs in a newer version
- * on another host. Above both tabs, and below each host's name, the page says how many add-ons
- * answered in time with something rated (coverage), whatever the switch.
+ * on another host. Above both tabs, and below each host's name, the page says how many of the
+ * add-ons a host is expected to have answered in time with something rated (coverage), whatever
+ * the switch; below each host's name also its roles from the target profile that its Host
+ * Settings sends, or that it has none.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -382,13 +384,15 @@
     }
 
     /* The gaps of the coverage in the order the page names them: what says least first. */
-    const GAP_ORDER = ["unreadable", "noaccess", "unconfigured", "failed", "unsupported", "unchecked", "stale", "partial"];
+    const GAP_ORDER = ["unreadable", "missing", "noaccess", "unconfigured", "failed", "unsupported", "unchecked", "stale", "partial"];
 
-    /* The coverage of the board, above both tabs and outside the switch: how many add-ons answered
-       in time with something rated, what keeps the others from it, and how many hosts could not be
-       read. Hidden while no host has an add-on with a status (the empty state says so). */
+    /* The coverage of the board, above both tabs and outside the switch: how many of the add-ons
+       the hosts are expected to have answered in time with something rated, what keeps the others
+       from it, how many hosts could not be read, and as a notice how many send no target profile.
+       Hidden while no host has an add-on with a status (the empty state says so). */
     function renderCoverage(rows, nothing) {
         const c = SB.coverageSummary(rows);
+        const noProfile = rows.filter(r => r.noProfile).length;
         const box = $("coverage");
         box.hidden = nothing || (c.total === 0 && c.unread === 0);
         if (box.hidden) {
@@ -402,14 +406,25 @@
             h("span", { class: "sb-coverage__figure" }, T.coverageCount(c.checked, c.total)),
             gaps,
             c.unread ? label(c.unreadState, T.coverageHosts(c.unread)) : null,
+            noProfile ? label("info", T.coverageNoProfile(noProfile)) : null,
             !state.loading && !gaps.length && !c.unread ? label("ok", T.coverageComplete) : null);
     }
 
     /* One gap: "Cron Jobs: no access", or with the check that shows it, "Security Monitor:
        Container hardening partly checked". */
     const gapText = g => g.label + ": " + (g.check ? T.checkGap[g.coverage](g.check) : T.coverageWords[g.coverage]);
-    /* A host's coverage below its name: "2 of 3 add-ons checked · Cron Jobs: no access". */
+    /* A host's coverage below its name: "2 of 3 expected add-ons checked · Cron Jobs: no access". */
     const coverageLine = c => [T.hostCoverage(c.checked, c.total)].concat(c.gaps.map(gapText)).join(" · ");
+    /* Below a host's name: its coverage, then the roles of its target profile as neutral chips (a
+       host's own words, as text), or the notice that it sends no profile. Nothing for a host that
+       could not be read. */
+    function hostCoverage(row) {
+        const line = row.coverage ? coverageLine(row.coverage) : "";
+        const profile = row.profile ? row.profile.roles.map(r => chip(T.role(r))) : row.noProfile ? [label("info", T.noProfile)] : [];
+        if (!line && !profile.length) return null;
+        return h("div", { class: "sb-host__coverage" }, line ? h("span", { class: "sb-host__figure" }, line) : null,
+            profile.length ? h("span", { class: "sb-host__profile" }, profile) : null);
+    }
 
     function errorText(e) {
         switch (e.kind) {
@@ -464,7 +479,7 @@
         const toHost = go ? h("span", { class: "sb-tile__go" }, T.toHost) : null;
         switch (tile.kind) {
         case "status": return statusParts(tile);
-        case "missing": return [text(T.missingText)];
+        case "missing": return [text(tile.expected ? T.missingExpectedText : T.missingText)];
         case "nostatus": return [text(T.nostatusText)];
         case "noaccess": return [text(T.noaccessText)];
         case "rejected": return [text(rich(T.rejectedText))];
@@ -567,7 +582,8 @@
 
     /* quiet: no note for a row without tiles (the empty state above says it for all rows).
        The label always says the whole row; with "only what needs attention" the tiles that do not
-       are left out, and a row left without any says so. The coverage line stays either way. */
+       are left out, and a row left without any says so. The coverage line stays either way, right
+       after the header. */
     function renderRow(row, index, quiet, nextId) {
         const host = row.host;
         const id = "host-" + index;
@@ -579,7 +595,7 @@
                 h("h2", { class: "sb-host__title", id }, host.label),
                 sub ? h("span", { class: "az-meta" }, sub) : null,
                 rowLabel(row)),
-            row.coverage ? h("p", { class: "sb-host__coverage" }, coverageLine(row.coverage)) : null,
+            hostCoverage(row),
             tiles.length ? h("div", { class: "sb-tiles" }, tiles.map(t => renderTile(host, t, nextId())))
                 : quiet ? null : h("p", { class: "sb-note" }, note));
     }
@@ -599,6 +615,7 @@
         const tile = task.tile;
         switch (task.kind) {
         case "item": return [task.item.detail, null];
+        case "profile": return [T.noProfileText, null];
         case "host":
             if (tile.kind === "unreachable") return [rich(reachText(tile)), tile.message];
             if (tile.kind === "locked") return [rich(lockedText()), tile.identity ? h("code", null, tile.identity) : null];
@@ -609,6 +626,9 @@
                     (c.staleAt !== null ? " (" + T.staleSince(fmtWhen(c.staleAt)) + ")" : "")).join("; "), null];
             }
             switch (task.coverage) {
+            case "missing": return [T.missingExpectedText, null];
+            /* without a check only from a version without the status entry */
+            case "unsupported": return [T.nostatusText, null];
             case "noaccess": return [T.noaccessText, null];
             case "unchecked": return [T.uncheckedText, null];
             case "stale": return [T.staleText(fmtWhen(tile.eval.staleSince)), null];
@@ -619,16 +639,20 @@
     }
 
     /* One task: its label, title and "new"; host and add-on (and the item a finding belongs to);
-       the reasons for its place in the list; what the add-on says; since when, the evidence and
-       what resolves it; and a button that opens the add-on on its host at the finding's, item's or
+       the reasons for its place in the list (for a gap of a host with a target profile, whether
+       the profile expects the add-on); what the add-on says; since when, the evidence and what
+       resolves it; and a button that opens the add-on on its host at the finding's, item's or
        check's place, through jumpTo() like a tile (nothing for another host without the host
-       switcher). */
+       switcher, nor for an add-on that is missing). The notice "No target profile" opens the
+       host's Host Settings where it is installed. */
     function renderTask(task, id) {
         const tile = task.tile;
         const host = task.host;
         const go = !!tile.jump && (host.own || OTHER_HOSTS);
         const titleId = "task-" + id;
         const title = task.kind === "host" ? T.words[tile.word]
+            : task.kind === "profile" ? T.noProfile
+            : task.kind === "coverage" && task.coverage === "missing" ? T.missingTitle(tile.label)
             : task.kind === "coverage" ? gapText({ label: tile.label, coverage: task.coverage, check: task.check ? task.check.title : null })
             : task.kind === "item" && task.item.value ? task.item.title + ": " + task.item.value : task.title;
         const where = [h("strong", null, host.label), tile.pkg ? " · " + tile.label : null, task.kind === "finding" ? " · " + task.item.title : null];
@@ -638,13 +662,14 @@
             task.fix === "available" ? chip(T.chips.fix) : null,
             task.summaryOnly ? chip(T.chips.summary) : null,
             task.kind === "host" ? chip(T.chips.unknown, true) : null,
+            task.kind === "coverage" && task.roles ? chip(task.expected ? T.chips.expected(task.roles.length, task.roles.join(", ")) : T.chips.optional) : null,
         ].filter(Boolean);
         const [detail, sub] = taskDetail(task);
         const ev = task.evidence;
         const facts = [
             task.since !== null ? [T.factSince, fmtWhen(task.since), fmtFull(task.since)] : null,
             ev ? [T.factEvidence, ev.complete === null ? T.checked(fmtWhen(ev.at)) : T.evidence[ev.complete ? "complete" : "partial"](fmtWhen(ev.at)), fmtFull(ev.at)] : null,
-            [T.factResolved, T.resolved[task.kind], null],
+            [T.factResolved, T.resolved[task.kind === "coverage" && task.coverage === "missing" ? "missing" : task.kind], null],
         ].filter(Boolean);
         return h("article", { class: "az-card sb-task", "data-task": task.key, "aria-labelledby": titleId },
             h("div", { class: "sb-task__main" },
@@ -684,6 +709,9 @@
                     h("tbody", null, cells.map(r => h("tr", null, r.map((cell, i) => h("td", { "data-label": cols[i] }, cell)))))))) : null);
     }
 
+    /* Who left a check out: the add-on itself, or the host's target profile (until when). */
+    const setBy = check => (!check.byProfile ? T.setBy.addon : check.until !== null ? T.setBy.until(fmtWhen(check.until)) : T.setBy.profile);
+
     /* The tab "Needs attention": the tasks grouped by state (Problem, Warning, Notice), in the
        order of buildTasks(), then the folds. Says when nothing needs attention, and that hosts are
        still loading. */
@@ -700,8 +728,8 @@
                 g.tasks.map(t => renderTask(t, nextId())))),
             renderFold("accepted", T.accepted, [T.colFinding, T.colHost, T.colAddon, T.colUntil],
                 model.accepted.map(a => [a.finding.title, a.host.label, a.tile.label, fmtWhen(a.until)])),
-            renderFold("notapplicable", T.notApplicable, [T.colCheck, T.colHost, T.colAddon, T.colReason],
-                model.notApplicable.map(n => [n.check.title, n.host.label, n.tile.label, n.check.reason])));
+            renderFold("notapplicable", T.notApplicable, [T.colCheck, T.colHost, T.colAddon, T.colReason, T.colSetBy],
+                model.notApplicable.map(n => [n.check.title, n.host.label, n.tile.label, n.check.reason, setBy(n.check)])));
     }
 
     /* The tabs as the state says: which one is selected (and in the order of Tab), which panel
