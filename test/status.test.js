@@ -45,7 +45,7 @@ const EXPECT = {
     "real-update-gaps.de.json": { state: "warning", reported: "warning", items: 7, key: "held", value: "6", link: "#/held" },
     "real-security.json": { state: "danger", reported: "danger", items: 5, key: "containers", value: "1", link: "#/containers" },
     "real-security.de.json": { state: "danger", reported: "danger", items: 5, key: "containers", value: "1", link: "#/containers" },
-    /* the Security Monitor on its recordings of the other three hosts: vpn-host, build-host, claw-host */
+    /* the Security Monitor on its recordings of the other three hosts: bastion, ci1, db1 */
     "real-security-edge.json": { state: "danger", reported: "danger", items: 5, key: "containers", value: "1", link: "#/containers" },
     "real-security-edge.de.json": { state: "danger", reported: "danger", items: 5, key: "containers", value: "1", link: "#/containers" },
     "real-security-ci.json": { state: "danger", reported: "danger", items: 5, key: "containers", value: "5", link: "#/containers" },
@@ -654,9 +654,9 @@ t("parseMachines: the fixture, plain and as D-Bus variants", () => {
     for (const input of [raw, variants(raw)]) {
         const m = SB.parseMachines(input);
         assert.deepStrictEqual(m.hosts.map(x => [x.key, x.connection, x.label]), [
-            ["public-host", "stefan@public-host", null],
-            ["build-host", "build-host", "build-host (CI)"],
-            ["claw-host", "claw-host:2222", null],
+            ["web1", "stefan@web1", null],
+            ["ci1", "ci1", "ci1 (CI)"],
+            ["db1", "db1:2222", null],
             ["old-host", "old-host", null],
             ["locked-host", "locked-host", null],
         ]);
@@ -667,7 +667,7 @@ t("parseMachines: the fixture, plain and as D-Bus variants", () => {
 
 t("parseMachines: odd input", () => {
     assert.deepStrictEqual(SB.parseMachines(null), { hosts: [], skipped: [], localLabel: null });
-    assert.deepStrictEqual(SB.parseMachines({ localhost: { label: "vpn-host", visible: true } }).localLabel, "vpn-host");
+    assert.deepStrictEqual(SB.parseMachines({ localhost: { label: "bastion", visible: true } }).localLabel, "bastion");
     const m = SB.parseMachines({ a: { visible: true, address: "b", port: 22 }, c: "x", d: { visible: true, port: "22; reboot" } });
     assert.deepStrictEqual(m.hosts.map(x => x.connection), ["b:22"]);
     assert.deepStrictEqual(m.skipped, ["d"]);
@@ -702,11 +702,11 @@ const okHost = (key, own, names, results, label) => ({
 
 function board() {
     return SB.buildBoard(SB.sortHosts([
-        okHost("public-host", false, [["cronjobs", "cronjobs"], ["image-updates", "image-updates"], ["update-gaps", "update-gaps"], ["system", "system"]],
+        okHost("web1", false, [["cronjobs", "cronjobs"], ["image-updates", "image-updates"], ["update-gaps", "update-gaps"], ["system", "system"]],
                { cronjobs: status("good-cronjobs-danger.json"), "image-updates": status("good-image-updates.json"), "update-gaps": status("good-update-gaps.json") }),
         okHost("localhost", true, [["cronjobs", "cronjobs"], ["image-updates", "image-updates"]],
-               { cronjobs: status("good-cronjobs-ok.json"), "image-updates": { kind: "noaccess" } }, "vpn-host"),
-        okHost("claw-host", false, [["cronjobs", "cronjobs"], ["update-gaps", "update-gaps-old"]], { cronjobs: { kind: "timeout" } }),
+               { cronjobs: status("good-cronjobs-ok.json"), "image-updates": { kind: "noaccess" } }, "bastion"),
+        okHost("db1", false, [["cronjobs", "cronjobs"], ["update-gaps", "update-gaps-old"]], { cronjobs: { kind: "timeout" } }),
         okHost("evil-host", false, [["image-updates", "hostile-sh"], ["cronjobs", "cronjobs"]], { cronjobs: { kind: "invalid", reason: "not-json", detail: null } }),
         { key: "old-host", own: false, label: "old-host", connection: "old-host", result: SB.reachOf({ problem: "no-host" }) },
         { key: "locked-host", own: false, label: "locked-host", connection: "locked-host", result: SB.reachOf({ problem: "authentication-failed", error: "locked identity: /k" }) },
@@ -719,18 +719,18 @@ const kinds = r => r.tiles.map(x => [x.pkg || null, x.kind, x.state, x.word]);
 
 t("buildBoard: hosts in the order of the host switcher, this host first", () => {
     assert.deepStrictEqual(board().map(r => r.host.key),
-        ["localhost", "claw-host", "dark-host", "evil-host", "locked-host", "new-host", "old-host", "public-host"]);
+        ["localhost", "dark-host", "db1", "evil-host", "locked-host", "new-host", "old-host", "web1"]);
 });
 
 t("buildBoard: one tile per add-on with a status entry, sorted by label", () => {
     const rows = board();
-    assert.deepStrictEqual(kinds(row(rows, "public-host")), [
+    assert.deepStrictEqual(kinds(row(rows, "web1")), [
         ["cronjobs", "status", "danger", "danger"],
         ["image-updates", "status", "info", "info"],
         ["update-gaps", "status", "warning", "warning"],
     ]);
-    assert.deepStrictEqual(row(rows, "public-host").tiles.map(x => x.label), ["Cron Jobs", "Image Update Monitor", "Update Gaps"]);
-    assert.strictEqual(row(rows, "public-host").state, "danger");
+    assert.deepStrictEqual(row(rows, "web1").tiles.map(x => x.label), ["Cron Jobs", "Image Update Monitor", "Update Gaps"]);
+    assert.strictEqual(row(rows, "web1").state, "danger");
 });
 
 t("buildBoard: not installed, no status entry, no access", () => {
@@ -740,12 +740,12 @@ t("buildBoard: not installed, no status entry, no access", () => {
         ["image-updates", "noaccess", "warning", "noaccess"],
         ["update-gaps", "missing", "none", "missing"],
     ]);
-    assert.deepStrictEqual(kinds(row(rows, "claw-host")), [
+    assert.deepStrictEqual(kinds(row(rows, "db1")), [
         ["cronjobs", "error", "warning", "unreadable"],
         ["image-updates", "missing", "none", "missing"],
         ["update-gaps", "nostatus", "none", "nostatus"],
     ]);
-    assert.strictEqual(row(rows, "claw-host").tiles[1].jump, false, "nothing to open where it is not installed");
+    assert.strictEqual(row(rows, "db1").tiles[1].jump, false, "nothing to open where it is not installed");
 });
 
 t("buildBoard: a refused command and an unreadable answer", () => {
@@ -834,7 +834,7 @@ t("coverage of every tile of the board", () => {
     const rows = board();
     const cov = key => row(rows, key).tiles.map(x => [x.pkg || x.kind, x.coverage]);
     assert.deepStrictEqual(cov("localhost"), [["cronjobs", "checked"], ["image-updates", "noaccess"], ["update-gaps", null]]);
-    assert.deepStrictEqual(cov("claw-host"), [["cronjobs", "unreadable"], ["image-updates", null], ["update-gaps", null]],
+    assert.deepStrictEqual(cov("db1"), [["cronjobs", "unreadable"], ["image-updates", null], ["update-gaps", null]],
         "not installed and no status entry are no gap of a check");
     assert.deepStrictEqual(cov("evil-host"), [["cronjobs", "unreadable"], ["image-updates", "unreadable"], ["update-gaps", null]]);
     ["old-host", "locked-host", "dark-host", "new-host"].forEach(k => assert.deepStrictEqual(cov(k).map(c => c[1]), [null], k));
@@ -846,8 +846,8 @@ t("coverage of every row", () => {
     const rows = board();
     assert.deepStrictEqual(row(rows, "localhost").coverage,
         { total: 2, checked: 1, gaps: [{ pkg: "image-updates", label: "Image Update Monitor", coverage: "noaccess" }] });
-    assert.deepStrictEqual(row(rows, "public-host").coverage, { total: 3, checked: 3, gaps: [] });
-    assert.deepStrictEqual(row(rows, "claw-host").coverage, { total: 1, checked: 0, gaps: [{ pkg: "cronjobs", label: "Cron Jobs", coverage: "unreadable" }] });
+    assert.deepStrictEqual(row(rows, "web1").coverage, { total: 3, checked: 3, gaps: [] });
+    assert.deepStrictEqual(row(rows, "db1").coverage, { total: 1, checked: 0, gaps: [{ pkg: "cronjobs", label: "Cron Jobs", coverage: "unreadable" }] });
     ["old-host", "locked-host", "dark-host", "new-host"].forEach(k => assert.strictEqual(row(rows, k).coverage, null, k));
 });
 
@@ -863,19 +863,19 @@ t("coverageSummary of the board", () => {
 
 /* The add-ons of the optional parts on three hosts, next to answers without them, and two hosts
    that cannot be read: the scenario "tasks" of the browser tests. Host Settings sends the same
-   profile on this host and on public-host (role web: the five add-ons, update-gaps/cve left out);
-   build-host has no Host Settings, so no target profile. */
+   profile on this host and on web1 (role web: the five add-ons, update-gaps/cve left out);
+   ci1 has no Host Settings, so no target profile. */
 function suite(now) {
     return SB.buildBoard(SB.sortHosts([
         okHost("localhost", true, [["host-settings", "host-settings"], ["cronjobs", "cronjobs"]],
-               { "host-settings": status("ext-good-host-settings.json"), cronjobs: status("good-cronjobs-ok.json") }, "vpn-host"),
-        okHost("public-host", false, [["cronjobs", "cronjobs"], ["image-updates", "image-updates"], ["security", "security"], ["update-gaps", "update-gaps"],
+               { "host-settings": status("ext-good-host-settings.json"), cronjobs: status("good-cronjobs-ok.json") }, "bastion"),
+        okHost("web1", false, [["cronjobs", "cronjobs"], ["image-updates", "image-updates"], ["security", "security"], ["update-gaps", "update-gaps"],
                                       ["host-settings", "host-settings"], ["system", "system"]],
                { cronjobs: status("good-cronjobs-danger.json"), "image-updates": status("good-image-updates.json"),
                  security: status("ext-good-security.json"), "update-gaps": status("ext-good-update-gaps.json"),
                  "host-settings": status("ext-good-host-settings.json") }),
-        okHost("build-host", false, [["cronjobs", "cronjobs"], ["image-updates", "image-updates"], ["system", "system"]],
-               { cronjobs: { kind: "noaccess" }, "image-updates": status("good-image-updates-stale.json") }, "build-host (CI)"),
+        okHost("ci1", false, [["cronjobs", "cronjobs"], ["image-updates", "image-updates"], ["system", "system"]],
+               { cronjobs: { kind: "noaccess" }, "image-updates": status("good-image-updates-stale.json") }, "ci1 (CI)"),
         { key: "old-host", own: false, label: "old-host", connection: "old-host", result: SB.reachOf({ problem: "no-host" }) },
         { key: "locked-host", own: false, label: "locked-host", connection: "locked-host", result: SB.reachOf({ problem: "authentication-failed", error: "locked identity: /k" }) },
     ]), now === undefined ? NOW : now);
@@ -923,24 +923,24 @@ t("checksCoverage: the order of the gaps, from partial to no access", () => {
 t("coverage from checks: the tiles, the rows and the board", () => {
     const rows = suite();
     const cov = key => row(rows, key).tiles.filter(x => x.coverage).map(x => [x.pkg, x.coverage, x.gapCheck ? x.gapCheck.id : null, x.gapChecks.map(c => c.id)]);
-    /* public-host's profile leaves out update-gaps/cve, which is not set up there: no gap */
-    assert.deepStrictEqual(cov("public-host"), [
+    /* web1's profile leaves out update-gaps/cve, which is not set up there: no gap */
+    assert.deepStrictEqual(cov("web1"), [
         ["cronjobs", "checked", null, []], ["host-settings", "checked", null, []], ["image-updates", "checked", null, []],
         ["security", "partial", "containers", ["containers"]], ["update-gaps", "checked", null, []]]);
     /* this host sends the same profile: three of the five add-ons it expects are not installed */
     assert.deepStrictEqual(cov("localhost"), [["cronjobs", "checked", null, []], ["host-settings", "checked", null, []],
         ["image-updates", "missing", null, []], ["security", "missing", null, []], ["update-gaps", "missing", null, []]]);
-    assert.deepStrictEqual(row(rows, "public-host").coverage, { total: 5, checked: 4, gaps: [
+    assert.deepStrictEqual(row(rows, "web1").coverage, { total: 5, checked: 4, gaps: [
         { pkg: "security", label: "Security Monitor", coverage: "partial", check: "Container hardening" }] });
-    assert.deepStrictEqual(row(rows, "build-host").coverage, { total: 2, checked: 0, gaps: [
+    assert.deepStrictEqual(row(rows, "ci1").coverage, { total: 2, checked: 0, gaps: [
         { pkg: "cronjobs", label: "Cron Jobs", coverage: "noaccess" }, { pkg: "image-updates", label: "Image Update Monitor", coverage: "stale" }] },
         "answers without checks as before, with no check named");
     assert.deepStrictEqual(SB.coverageSummary(rows), {
         total: 12, checked: 6, gaps: { unchecked: 0, stale: 1, noaccess: 1, unreadable: 0, missing: 3, partial: 1 }, unread: 2, unreadState: "danger" });
     /* a single item in state none stays no gap: Security Monitor's containers counts through its check */
-    assert.ok(row(rows, "public-host").tiles.find(x => x.pkg === "security").status.items.some(i => i.state === "none"));
-    assert.strictEqual(row(rows, "public-host").tiles.find(x => x.pkg === "cronjobs").coverage, "checked", "Cron Jobs with an entry in none");
-    assert.strictEqual(SB.coverageOf(row(rows, "public-host").tiles.find(x => x.pkg === "security"), NOW + 3600e3), "stale");
+    assert.ok(row(rows, "web1").tiles.find(x => x.pkg === "security").status.items.some(i => i.state === "none"));
+    assert.strictEqual(row(rows, "web1").tiles.find(x => x.pkg === "cronjobs").coverage, "checked", "Cron Jobs with an entry in none");
+    assert.strictEqual(SB.coverageOf(row(rows, "web1").tiles.find(x => x.pkg === "security"), NOW + 3600e3), "stale");
 });
 
 t("coverage from checks: every check applies or not, whatever the items say", () => {
@@ -961,19 +961,19 @@ t("buildTasks: the order of the scenario (state, host not read, exposure, older 
     const m = tasksOf(suite());
     assert.deepStrictEqual(m.tasks.map(x => [x.key, x.kind, x.state]), [
         ["old-host/unreachable", "host", "danger"],
-        ["public-host/security/finding:port.6379-tcp", "finding", "danger"],
-        ["public-host/security/finding:port.5432-tcp", "finding", "danger"],
-        ["public-host/cronjobs/item:failed-runs", "item", "danger"],
+        ["web1/security/finding:port.6379-tcp", "finding", "danger"],
+        ["web1/security/finding:port.5432-tcp", "finding", "danger"],
+        ["web1/cronjobs/item:failed-runs", "item", "danger"],
         ["locked-host/locked", "host", "warning"],
-        ["public-host/update-gaps/finding:restart.kernel", "finding", "warning"],
+        ["web1/update-gaps/finding:restart.kernel", "finding", "warning"],
         ["localhost/image-updates/coverage", "coverage", "warning"],
         ["localhost/security/coverage", "coverage", "warning"],
         ["localhost/update-gaps/coverage", "coverage", "warning"],
-        ["build-host/cronjobs/coverage", "coverage", "warning"],
-        ["build-host/image-updates/coverage", "coverage", "warning"],
-        ["public-host/security/coverage", "coverage", "warning"],
-        ["build-host/profile", "profile", "info"],
-        ["public-host/image-updates/item:updates", "item", "info"],
+        ["ci1/cronjobs/coverage", "coverage", "warning"],
+        ["ci1/image-updates/coverage", "coverage", "warning"],
+        ["web1/security/coverage", "coverage", "warning"],
+        ["ci1/profile", "profile", "info"],
+        ["web1/image-updates/item:updates", "item", "info"],
     ]);
     m.tasks.forEach(x => assert.ok(x.host && x.tile && typeof x.title === "string", x.key));
 });
@@ -981,15 +981,15 @@ t("buildTasks: the order of the scenario (state, host not read, exposure, older 
 t("buildTasks: a finding with its reasons, its evidence and its place", () => {
     const m = tasksOf(suite());
     const f = key => m.tasks.find(x => x.key === key);
-    const older = f("public-host/security/finding:port.6379-tcp");
+    const older = f("web1/security/finding:port.6379-tcp");
     assert.deepStrictEqual([older.title, older.item.id, older.since, older.isNew, older.exposure, older.fix, older.exploited, older.link, older.evidence],
         ["6379/tcp redis", "exposure", Date.UTC(2026, 9, 17, 7, 30), false, "internet", "available", null, "#/exposure/6379-tcp",
          { at: Date.UTC(2026, 9, 19, 18, 50), complete: true }]);
-    const fresh = f("public-host/security/finding:port.5432-tcp");
+    const fresh = f("web1/security/finding:port.5432-tcp");
     assert.deepStrictEqual([fresh.since, fresh.isNew], [Date.UTC(2026, 9, 19, 18, 30), true], "seen half an hour ago: new");
     assert.strictEqual(tasksOf(suite(), Date.UTC(2026, 9, 20, 18, 30)).tasks.find(x => x.key === fresh.key).isNew, false, "a day later it is not");
     assert.strictEqual(tasksOf(suite(), Date.UTC(2026, 9, 20, 18, 30) - 1).tasks.find(x => x.key === fresh.key).isNew, true);
-    const restart = f("public-host/update-gaps/finding:restart.kernel");
+    const restart = f("web1/update-gaps/finding:restart.kernel");
     assert.deepStrictEqual([restart.state, restart.fix, restart.exposure, restart.link, restart.evidence],
         ["warning", "available", null, "#/restart", { at: Date.UTC(2026, 9, 19, 18, 45), complete: true }],
         "its acceptance ended at noon: open again, although the item says OK");
@@ -997,7 +997,7 @@ t("buildTasks: a finding with its reasons, its evidence and its place", () => {
 
 t("buildTasks: items, summary only without any optional part", () => {
     const m = tasksOf(suite());
-    const runs = m.tasks.find(x => x.key === "public-host/cronjobs/item:failed-runs");
+    const runs = m.tasks.find(x => x.key === "web1/cronjobs/item:failed-runs");
     assert.deepStrictEqual([runs.title, runs.item.value, runs.summaryOnly, runs.link, runs.evidence, runs.since, runs.isNew],
         ["Failed runs (24 h)", "2", true, "", { at: Date.UTC(2026, 9, 19, 18, 50, 3), complete: null }, null, false]);
     assert.ok(m.tasks.filter(x => x.kind === "item").every(x => x.summaryOnly), "Cron Jobs and Image Update Monitor send no optional part");
@@ -1019,26 +1019,26 @@ t("buildTasks: items, summary only without any optional part", () => {
 t("buildTasks: gaps in the coverage, from checks and from tiles", () => {
     const m = tasksOf(suite());
     const gap = key => m.tasks.find(x => x.key === key);
-    const sec = gap("public-host/security/coverage");
+    const sec = gap("web1/security/coverage");
     assert.deepStrictEqual([sec.coverage, sec.check.id, sec.checks.map(c => c.id), sec.title, sec.link, sec.evidence],
         ["partial", "containers", ["containers"], "Container hardening", "#/containers", { at: Date.UTC(2026, 9, 19, 18, 50), complete: null }],
         "the check has no link: its item's");
-    /* Open CVEs, not set up, is no gap on public-host, whose profile leaves it out; on a host
+    /* Open CVEs, not set up, is no gap on web1, whose profile leaves it out; on a host
        without a profile it is one */
-    assert.strictEqual(gap("public-host/update-gaps/coverage"), undefined);
-    const bare = tasksOf(SB.buildBoard([okHost("public-host", false, [["update-gaps", "update-gaps"]], { "update-gaps": status("ext-good-update-gaps.json") })], NOW));
-    const cve = bare.tasks.find(x => x.key === "public-host/update-gaps/coverage");
+    assert.strictEqual(gap("web1/update-gaps/coverage"), undefined);
+    const bare = tasksOf(SB.buildBoard([okHost("web1", false, [["update-gaps", "update-gaps"]], { "update-gaps": status("ext-good-update-gaps.json") })], NOW));
+    const cve = bare.tasks.find(x => x.key === "web1/update-gaps/coverage");
     assert.deepStrictEqual([cve.coverage, cve.check.reason, cve.link, cve.evidence.at], ["unconfigured", "the network data are not set up", "", Date.UTC(2026, 9, 19, 18, 45)],
         "no link and no item: the add-on's start; no time: the answer's");
-    const old = gap("build-host/image-updates/coverage");
+    const old = gap("ci1/image-updates/coverage");
     assert.deepStrictEqual([old.coverage, old.check, old.checks, old.link, old.evidence.at], ["stale", null, [], null, Date.UTC(2026, 9, 18, 5, 12)],
         "an answer without checks: the tile's own link (null), the time of its data");
-    const noaccess = gap("build-host/cronjobs/coverage");
+    const noaccess = gap("ci1/cronjobs/coverage");
     assert.deepStrictEqual([noaccess.coverage, noaccess.evidence, noaccess.tile.kind], ["noaccess", null, "noaccess"]);
     /* an entry out of date is a gap of its add-on, not a task of its own */
-    assert.ok(!m.tasks.some(x => x.key.startsWith("build-host/image-updates/item:")));
+    assert.ok(!m.tasks.some(x => x.key.startsWith("ci1/image-updates/item:")));
     /* an hour later the Security Monitor's checks are out of date: still one task, now "stale" */
-    const later = tasksOf(suite(NOW + 3600e3), NOW + 3600e3).tasks.filter(x => x.key === "public-host/security/coverage");
+    const later = tasksOf(suite(NOW + 3600e3), NOW + 3600e3).tasks.filter(x => x.key === "web1/security/coverage");
     assert.deepStrictEqual(later.map(x => [x.coverage, x.check.id, x.checks.map(c => [c.id, c.coverage])]),
         [["stale", "exposure", [["exposure", "stale"], ["containers", "stale"]]]]);
 });
@@ -1046,19 +1046,19 @@ t("buildTasks: gaps in the coverage, from checks and from tiles", () => {
 t("buildTasks: accepted findings and checks that do not apply", () => {
     const m = tasksOf(suite());
     assert.deepStrictEqual(m.accepted.map(a => [a.key, a.finding.title, a.host.key, a.tile.pkg, a.until]),
-        [["public-host/update-gaps/finding:held.postgresql-16", "postgresql-16 is held", "public-host", "update-gaps", Date.UTC(2026, 9, 30)]]);
-    assert.ok(!m.tasks.some(x => x.key === "public-host/update-gaps/finding:held.postgresql-16"), "accepted is no task");
+        [["web1/update-gaps/finding:held.postgresql-16", "postgresql-16 is held", "web1", "update-gaps", Date.UTC(2026, 9, 30)]]);
+    assert.ok(!m.tasks.some(x => x.key === "web1/update-gaps/finding:held.postgresql-16"), "accepted is no task");
     assert.deepStrictEqual(m.notApplicable.map(n => [n.host.key, n.tile.pkg, n.check.id, n.check.reason, n.check.byProfile || false]),
-        [["public-host", "security", "fail2ban", "fail2ban is not installed", false],
-         ["public-host", "update-gaps", "cve", "network data off on purpose", true]],
+        [["web1", "security", "fail2ban", "fail2ban is not installed", false],
+         ["web1", "update-gaps", "cve", "network data off on purpose", true]],
         "what the add-on finds itself, and what the host's profile leaves out");
     /* in the morning both acceptances ran: no finding of Update Gaps is a task */
     const morning = tasksOf(suite(Date.UTC(2026, 9, 19, 11)), Date.UTC(2026, 9, 19, 11));
     assert.deepStrictEqual(morning.accepted.map(a => a.finding.fid), ["restart.kernel", "held.postgresql-16"], "soonest end first");
-    assert.ok(!morning.tasks.some(x => x.key.startsWith("public-host/update-gaps/finding:")));
+    assert.ok(!morning.tasks.some(x => x.key.startsWith("web1/update-gaps/finding:")));
     /* on the day the other one ends, that finding is open again */
     const end = Date.UTC(2026, 9, 30);
-    assert.ok(tasksOf(suite(end), end).tasks.some(x => x.key === "public-host/update-gaps/finding:held.postgresql-16"));
+    assert.ok(tasksOf(suite(end), end).tasks.some(x => x.key === "web1/update-gaps/finding:held.postgresql-16"));
     assert.deepStrictEqual(tasksOf(suite(end), end).accepted, []);
 });
 
@@ -1066,21 +1066,21 @@ t("buildTasks: hosts that cannot be read, and the old fixtures", () => {
     const m = tasksOf(board());
     assert.deepStrictEqual(m.tasks.map(x => [x.key, x.kind, x.state]), [
         ["old-host/unreachable", "host", "danger"],
-        ["public-host/cronjobs/item:failed-runs", "item", "danger"],
+        ["web1/cronjobs/item:failed-runs", "item", "danger"],
         ["dark-host/discovery", "host", "warning"],
         ["locked-host/locked", "host", "warning"],
         ["localhost/image-updates/coverage", "coverage", "warning"],
-        ["claw-host/cronjobs/coverage", "coverage", "warning"],
+        ["db1/cronjobs/coverage", "coverage", "warning"],
         ["evil-host/cronjobs/coverage", "coverage", "warning"],
         ["evil-host/image-updates/coverage", "coverage", "warning"],
-        ["public-host/update-gaps/item:held", "item", "warning"],
-        ["public-host/update-gaps/item:reboot", "item", "warning"],
+        ["web1/update-gaps/item:held", "item", "warning"],
+        ["web1/update-gaps/item:reboot", "item", "warning"],
         ["localhost/profile", "profile", "info"],
-        ["claw-host/profile", "profile", "info"],
+        ["db1/profile", "profile", "info"],
         ["evil-host/profile", "profile", "info"],
-        ["public-host/profile", "profile", "info"],
-        ["public-host/image-updates/item:updates", "item", "info"],
-        ["public-host/update-gaps/item:pro", "item", "info"],
+        ["web1/profile", "profile", "info"],
+        ["web1/image-updates/item:updates", "item", "info"],
+        ["web1/update-gaps/item:pro", "item", "info"],
     ], "a host still loading has no task yet; not installed and no status are none; no host sends a profile: a notice for each one read");
     assert.deepStrictEqual(m.tasks.filter(x => x.kind === "coverage").map(x => x.coverage), ["noaccess", "unreadable", "unreadable", "unreadable"]);
     assert.deepStrictEqual([m.accepted, m.notApplicable], [[], []]);
@@ -1187,11 +1187,11 @@ t("profile: without one every installed add-on with a status entry is expected, 
     rows.forEach(r => r.tiles.filter(x => x.pkg).forEach(x =>
         assert.strictEqual(x.expected, x.kind !== "missing" && x.kind !== "nostatus", r.host.key + "/" + x.pkg)));
     assert.deepStrictEqual(rows.map(r => [r.host.key, r.profile, r.noProfile]), [
-        ["localhost", null, true], ["claw-host", null, true], ["dark-host", null, false], ["evil-host", null, true],
-        ["locked-host", null, false], ["new-host", null, false], ["old-host", null, false], ["public-host", null, true]],
+        ["localhost", null, true], ["dark-host", null, false], ["db1", null, true], ["evil-host", null, true],
+        ["locked-host", null, false], ["new-host", null, false], ["old-host", null, false], ["web1", null, true]],
         "the notice only for hosts that could be read");
-    assert.deepStrictEqual(brief(tileOn(rows, "claw-host", "update-gaps")), ["update-gaps", "nostatus", "none", "nostatus", null, false, null]);
-    assert.deepStrictEqual(brief(tileOn(rows, "claw-host", "image-updates")), ["image-updates", "missing", "none", "missing", null, false, null]);
+    assert.deepStrictEqual(brief(tileOn(rows, "db1", "update-gaps")), ["update-gaps", "nostatus", "none", "nostatus", null, false, null]);
+    assert.deepStrictEqual(brief(tileOn(rows, "db1", "image-updates")), ["image-updates", "missing", "none", "missing", null, false, null]);
     assert.deepStrictEqual(brief(tileOn(rows, "localhost", "image-updates")), ["image-updates", "noaccess", "warning", "noaccess", "noaccess", true, "warning"]);
     /* nothing anywhere: no tiles, no notice */
     assert.deepStrictEqual(SB.buildBoard([okHost("a", true, [["system", "system"]], {})], NOW).map(r => r.noProfile), [false]);
@@ -1199,7 +1199,7 @@ t("profile: without one every installed add-on with a status entry is expected, 
 
 t("profile: Host Settings decides for its own host: expected, missing, not expected", () => {
     const rows = suite();
-    assert.deepStrictEqual([row(rows, "localhost").profile.roles, row(rows, "public-host").profile.roles, row(rows, "build-host").profile],
+    assert.deepStrictEqual([row(rows, "localhost").profile.roles, row(rows, "web1").profile.roles, row(rows, "ci1").profile],
         [["web"], ["web"], null]);
     assert.deepStrictEqual(row(rows, "localhost").tiles.map(brief), [
         ["cronjobs", "status", "ok", "ok", "checked", true, null],
@@ -1210,8 +1210,8 @@ t("profile: Host Settings decides for its own host: expected, missing, not expec
     assert.ok(row(rows, "localhost").tiles.every(x => x.kind !== "missing" || x.jump === false), "a missing add-on opens nothing");
     assert.ok(row(rows, "localhost").tiles.filter(x => x.kind === "missing").every(SB.notable), "and stays with only what needs attention");
     assert.strictEqual(row(rows, "localhost").state, "warning");
-    /* the same tiles on build-host, which sends no profile: not installed, no gap */
-    assert.deepStrictEqual(["host-settings", "security", "update-gaps"].map(p => brief(tileOn(rows, "build-host", p))), [
+    /* the same tiles on ci1, which sends no profile: not installed, no gap */
+    assert.deepStrictEqual(["host-settings", "security", "update-gaps"].map(p => brief(tileOn(rows, "ci1", p))), [
         ["host-settings", "missing", "none", "missing", null, false, null],
         ["security", "missing", "none", "missing", null, false, null],
         ["update-gaps", "missing", "none", "missing", null, false, null]], "a profile applies only to the row of the host that sends it");
@@ -1219,7 +1219,7 @@ t("profile: Host Settings decides for its own host: expected, missing, not expec
         { pkg: "image-updates", label: "Image Update Monitor", coverage: "missing" },
         { pkg: "security", label: "Security Monitor", coverage: "missing" },
         { pkg: "update-gaps", label: "Update Gaps", coverage: "missing" }] });
-    assert.deepStrictEqual(rows.map(r => r.noProfile), [false, true, false, false, false], "only build-host lacks a profile");
+    assert.deepStrictEqual(rows.map(r => r.noProfile), [false, true, false, false, false], "only ci1 lacks a profile");
 });
 
 t("profile: another add-on's profile is not read, and a host does not decide for another", () => {
@@ -1450,14 +1450,14 @@ t("buildTasks: an expected add-on that is missing", () => {
         ["coverage", "warning", "", "missing", null, [], null, null, true, ["web"], false]);
     assert.deepStrictEqual(m.tasks.filter(x => x.kind === "coverage" && x.roles).map(x => [x.key, x.expected]), [
         ["localhost/image-updates/coverage", true], ["localhost/security/coverage", true], ["localhost/update-gaps/coverage", true],
-        ["public-host/security/coverage", true]], "the gaps of hosts with a profile carry its roles");
+        ["web1/security/coverage", true]], "the gaps of hosts with a profile carry its roles");
 });
 
 t("buildTasks: the notice of a host without a target profile", () => {
     const m = tasksOf(suite());
     const notice = m.tasks.filter(x => x.kind === "profile");
     assert.deepStrictEqual(notice.map(x => [x.key, x.state, x.title, x.host.key, x.tile.kind, x.tile.jump, x.pkg, x.link, x.evidence]),
-        [["build-host/profile", "info", "", "build-host", "profile", false, null, null, null]], "never a warning; without Host Settings nothing to open");
+        [["ci1/profile", "info", "", "ci1", "profile", false, null, null, null]], "never a warning; without Host Settings nothing to open");
     /* Host Settings installed in a version without the profile: the notice opens it */
     const rows = SB.buildBoard([okHost("a", true, [HS, ["cronjobs", "cronjobs"]], { "host-settings": hsWith(null), cronjobs: status("good-cronjobs-ok.json") })], NOW);
     const own = tasksOf(rows).tasks.filter(x => x.kind === "profile");
