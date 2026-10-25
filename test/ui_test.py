@@ -119,6 +119,27 @@ def no_problems(page, what):
     check(not page.problems, "no console problems (" + what + "): " + repr(page.problems))
 
 
+def renamed(page, value):
+    """value (a text, or what JSON carries) with the neutral names of the page's scenario (demo,
+    demo-tasks: NEUTRAL in test/web/mock-cockpit.js) in place of the recorded ones."""
+    text = value if isinstance(value, str) else json.dumps(value)
+    for recorded, neutral in mock(page, "names"):
+        text = text.replace(recorded, neutral)
+    return text if isinstance(value, str) else json.loads(text)
+
+
+def recorded_names(page):
+    """The recorded names that the page's scenario replaces and that are still in its document."""
+    html = page.content()
+    return [recorded for recorded, _ in mock(page, "names") if recorded in html]
+
+
+def first_difference(a, b):
+    """Where two texts part, with a little of each from there."""
+    i = next((n for n, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)))
+    return repr(a[max(0, i - 40):i + 60]) + " instead of " + repr(b[max(0, i - 40):i + 60])
+
+
 def labels_right(page):
     """The tiles whose label does not stand at the right edge of the tile's head."""
     return page.evaluate("""() => Array.from(document.querySelectorAll('.sb-tile__head')).filter(hd => {
@@ -570,7 +591,7 @@ with sync_playwright() as p:
     check(page.inner_text("#refresh").strip() == "Refresh", "other languages fall back to English")
     page.context.close()
 
-    # ---------- the add-ons' real answers, in English: the README's screenshots ----------
+    # ---------- the add-ons' real answers, in English (the README's screenshots: scenario demo, below) ----------
     page = open_page(browser, "scenario=real&lang=en")
     check(rows(page) == ["localhost", "build-host", "claw-host", "public-host"], "the real scenario's hosts: " + repr(rows(page)))
     order = page.evaluate("""() => Array.from(document.querySelectorAll('.sb-host')).map(s =>
@@ -602,7 +623,7 @@ with sync_playwright() as p:
           "older add-ons say which version runs elsewhere, the newest and the Security Monitor (0.2.0 everywhere) say nothing: " + repr(hints))
     check(page.inner_text('[data-key="public-host/security"] .sb-tile__meta') == "Checked 8 minutes ago · Version 0.2.0",
           "the version in the tile's facts: " + page.inner_text('[data-key="public-host/security"] .sb-tile__meta'))
-    shot(page, "readme-board")
+    board_text = page.inner_text("body")
     tile(page, "public-host/security").click()
     check(mock(page, "jumps")[-1] == ["/security#/containers", "public-host"],
           "a click opens the Security Monitor at its key item: " + json.dumps(mock(page, "jumps")))
@@ -694,7 +715,7 @@ with sync_playwright() as p:
           "the coverage stays with the switch, of the board and of every host: " + repr(cov))
     check(host_label(page, "claw-host") == [LABEL["danger"] + " az-label--strong", "Problem"], "the row's label still says the whole row")
     check(len(entries(key)) == 5, "an open tile stays open with the switch")
-    shot(page, "readme-board-details")
+    details_text = page.inner_text("body")
     no_problems(page, "real")
     # the browser keeps the choice: a new page of the same session starts with it
     again = page.context.new_page()
@@ -719,13 +740,41 @@ with sync_playwright() as p:
     check(note == [0, "Nichts Auffälliges."], "a host with nothing that needs attention says so: " + repr(note))
     check(host_label(page, "localhost") == [LABEL["ok"] + " az-label--strong", "In Ordnung"], "and its label still says OK")
     page.context.close()
-    page = open_page(browser, "scenario=real&lang=en", dark=True)
-    shot(page, "readme-board-dark")
-    no_problems(page, "real, dark")
+
+    # ---------- the same answers with neutral names (scenario demo): the README's screenshots ----------
+    page = open_page(browser, "scenario=demo&lang=en")
+    heads = page.evaluate("""() => Array.from(document.querySelectorAll('.sb-host__header')).map(h =>
+        [h.closest('.sb-host').dataset.host, h.querySelector('h2').innerText, (h.querySelector('.az-meta') || {}).innerText || null])""")
+    check(heads == [["localhost", "bastion", "this host"], ["ci1", "ci1 (CI)", "ci1"], ["db1", "db1", "db1:2222"], ["web1", "web1", "admin@web1"]],
+          "demo: neutral names for the hosts, their labels and connections: " + repr(heads))
+    text = page.inner_text("body")
+    check(text == renamed(page, board_text), "demo shows what real shows, with the neutral names: " + first_difference(text, renamed(page, board_text)))
+    shot(page, "readme-board")
+    toggle("web1/security").click()
+    page.click(".az-switch")
+    page.wait_for_timeout(50)
+    text = page.inner_text("body")
+    check(text == renamed(page, details_text), "and so it does with only what needs attention and the entries of the Security Monitor: "
+          + first_difference(text, renamed(page, details_text)))
+    shot(page, "readme-board-details")
+    page.click(".az-switch")
+    page.wait_for_timeout(50)
+    for _ in range(16):    # the entries of every tile that has more than one
+        closed = page.locator('.sb-tile__toggle[aria-expanded="false"]')
+        if not closed.count():
+            break
+        closed.first.click()
+    check(page.evaluate("() => document.querySelectorAll('.sb-panel').length") == 14 and recorded_names(page) == [],
+          "no recorded name of a host, user, job, container or service anywhere, with every entry folded out: " + repr(recorded_names(page)))
+    no_problems(page, "demo")
     page.context.close()
-    page = open_page(browser, "scenario=real&lang=en", width=390, height=844)
+    page = open_page(browser, "scenario=demo&lang=en", dark=True)
+    shot(page, "readme-board-dark")
+    no_problems(page, "demo, dark")
+    page.context.close()
+    page = open_page(browser, "scenario=demo&lang=en", width=390, height=844)
     shot(page, "readme-board-phone", full=False)
-    no_problems(page, "real, phone")
+    no_problems(page, "demo, phone")
     page.context.close()
 
     # ---------- Needs attention: the tasks over all hosts (scenario tasks: checks, findings, profile) ----------
@@ -953,7 +1002,7 @@ with sync_playwright() as p:
     page.click('[data-fold="notapplicable"] .sb-fold__toggle')
     check(folds(page)[1]["head"] == ["Check", "Host", "Add-on", "Reason", "Set by"] and
           [r[4] for r in folds(page)[1]["rows"]] == ["Add-on", "Target profile"], "who left a check out, in English: " + repr(folds(page)[1]))
-    shot(page, "readme-tasks")
+    tasks_en, folds_en = tasks(page), folds(page)   # the same with neutral names: scenario demo-tasks, below
     page.click("#tab-hosts")
     line = page.inner_text('[data-host="public-host"] .sb-host__coverage .sb-host__figure')
     check(line == "4 of 5 expected add-ons checked · Security Monitor: Container hardening partly checked", "the host's line in English: " + line)
@@ -962,6 +1011,19 @@ with sync_playwright() as p:
     check("Missing" in tile_text(page, "localhost/security") and "although its profile expects it" in tile_text(page, "localhost/security"),
           "a missing add-on's tile in English: " + tile_text(page, "localhost/security"))
     no_problems(page, "tasks, English")
+    page.context.close()
+
+    # the same with neutral names (scenario demo-tasks): the README's screenshot of the tasks
+    page = open_page(browser, "scenario=demo-tasks&lang=en", tab=None)
+    page.click('[data-fold="accepted"] .sb-fold__toggle')
+    page.click('[data-fold="notapplicable"] .sb-fold__toggle')
+    got = tasks(page)
+    check(got == renamed(page, tasks_en) and folds(page) == renamed(page, folds_en) and recorded_names(page) == []
+          and next((x["sub"] for x in got if x["key"] == "locked-host/locked"), None) == "/home/admin/.ssh/id_ed25519",
+          "demo-tasks shows the tasks of the scenario tasks with neutral names, and no recorded name: "
+          + repr([[x["key"], x["where"], x["sub"]] for x in got]) + " " + repr(recorded_names(page)))
+    shot(page, "readme-tasks")
+    no_problems(page, "demo-tasks")
     page.context.close()
 
     # dark, and on a phone

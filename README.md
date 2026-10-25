@@ -101,10 +101,11 @@ A tile in OK means that the add-on found nothing in what it checks, not that the
 | ![The same board in Cockpit's dark style](docs/img/board-dark.png) | ![The board on a phone](docs/img/board-phone.png) |
 |---|---|
 
-The screenshots come from the browser tests (`test/ui_test.py`, scenario `real`): the answers that
+The screenshots come from the browser tests (`test/ui_test.py`, scenario `demo`): the answers that
 Cron Jobs 2.9.0, Image Update Monitor 0.24.1, Update Gaps 0.6.0 and Security Monitor 0.2.0 give
-on their own test data. Each test run keeps them as `readme-board*.png` in the artifact
-`screenshots`.
+on their own test data (scenario `real`), with neutral names for the hosts, the user and what runs
+on them in place of the recorded ones. Each test run keeps them as `readme-board*.png` in the
+artifact `screenshots`.
 
 ## How it works
 
@@ -270,9 +271,9 @@ make packages     # dist/*.deb and dist/*.rpm (needs dpkg-deb and rpmbuild), rep
 ```
 
 `python3 test/serve.py` serves the page with the stand-in at
-`http://127.0.0.1:8773/pkg/status-board/index.html` (`?scenario=real`, `tasks`, `edge`, `hostile`, `broken`
-or `empty`, `?lang=en`). The fixtures in `test/fixtures` are written for 2026-10-19 19:00 UTC; the browser
-tests set their clock to it. The shared design files in `src/` are byte-identical copies from
+`http://127.0.0.1:8773/pkg/status-board/index.html` (`?scenario=real`, `demo`, `tasks`, `demo-tasks`,
+`edge`, `hostile`, `broken` or `empty`, `?lang=en`). The fixtures in `test/fixtures` are written for
+2026-10-19 19:00 UTC; the browser tests set their clock to it. The shared design files in `src/` are byte-identical copies from
 Cron Jobs (`tools/design-files.sha256`); never change them here.
 
 **End-to-end test.** CI runs `test/e2e_cockpit.py` as the job `e2e`, against a real Cockpit from
