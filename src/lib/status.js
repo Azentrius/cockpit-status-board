@@ -119,6 +119,8 @@
     const MAX_CHECKS = 50;
     /* findings per answer, over all its items; more go to a verb of their own later */
     const MAX_FINDINGS = 100;
+    /* the largest findings.total that is kept */
+    const MAX_TOTAL = 1000000;
     const MAX_ROLES = 10;
     const MAX_EXPECT = 100;
     const MAX_SKIP = 50;
@@ -217,7 +219,9 @@
             }
         }
         if (features.includes("findings")) {
-            /* complete only where a check of state "checked" shows the item's result */
+            /* complete only where the add-on says so, a check of state "checked" shows the item's
+               result, every entry of the list was taken over, and a whole-number total counts no
+               more findings than were taken over */
             const owner = new Map((checks || []).filter(c => c.item !== null).map(c => [c.item, c]));
             const fids = new Set();
             let listed = 0;
@@ -244,7 +248,10 @@
                 });
                 const check = owner.get(item.id);
                 if (!check || check.state !== "checked") complete = false;
-                const total = Number.isInteger(raw.total) && raw.total >= list.length && raw.total <= 1000000 ? raw.total : list.length;
+                /* the answer itself counts findings that are not in the list ("complete": true,
+                   "total": 1, "list": []); so does a total past MAX_TOTAL, which is not kept */
+                if (Number.isInteger(raw.total) && raw.total > list.length) complete = false;
+                const total = Number.isInteger(raw.total) && raw.total >= list.length && raw.total <= MAX_TOTAL ? raw.total : list.length;
                 item.findings = { complete, total, list };
             });
         }
@@ -962,7 +969,7 @@
     const api = {
         STATES, RANK, LABEL_CLASS, LIMITS, MAX_ITEMS, MAX_PACKAGES, MAX_OUTPUT,
         PACKAGE_RE, ITEM_ID_RE, LINK_RE, COMMAND_RE,
-        FEATURES, CHECK_STATES, FID_RE, EXPECT_RE, MAX_CHECKS, MAX_FINDINGS, MAX_ACCEPT_MS,
+        FEATURES, CHECK_STATES, FID_RE, EXPECT_RE, MAX_CHECKS, MAX_FINDINGS, MAX_TOTAL, MAX_ACCEPT_MS,
         rank, worse, cleanText, parseTime,
         validateStatus, stateOfItems, itemState, evaluate, classifyFailure, outputCollector,
         packageOfManifestPath, statusEntry, menuLabel, statusArgv, packagesOf,

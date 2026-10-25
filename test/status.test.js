@@ -84,6 +84,15 @@ const EXPECT = {
     "ext-hostile.json": { state: "danger", reported: "warning", items: 2, key: "exposure", value: "120" },
     "ext-hostile-profile.json": { state: "ok", reported: "ok", items: 1, key: "run" },
     "ext-incompatible-schema-2.json": { pkg: "security", reason: "schema", detail: "2" },
+    /* when a list of findings is complete, shared with Host Settings (see the tests "complete"
+       below); what the item says counts either way */
+    "ext-complete-total-1-empty.json": { state: "danger", reported: "danger", items: 1, key: "exposure", value: "1", link: "#/exposure" },
+    "ext-complete-total-2-one.json": { state: "danger", reported: "danger", items: 1, key: "exposure", value: "2", link: "#/exposure" },
+    "ext-complete-total-0-checked.json": { state: "ok", reported: "ok", items: 1, key: "exposure", value: "0", link: "#/exposure" },
+    "ext-complete-no-total.json": { state: "danger", reported: "danger", items: 1, key: "exposure", value: "2", link: "#/exposure" },
+    "ext-complete-invalid-entry.json": { state: "danger", reported: "danger", items: 1, key: "exposure", value: "2", link: "#/exposure" },
+    "ext-complete-duplicate-fid.json": { state: "danger", reported: "danger", items: 1, key: "exposure", value: "2", link: "#/exposure" },
+    "ext-complete-over-100.json": { state: "danger", reported: "danger", items: 1, key: "exposure", value: "101", link: "#/exposure" },
 };
 
 const statusFiles = fs.readdirSync(path.join(FIX, "status")).sort();
@@ -424,6 +433,98 @@ t("optional parts: every text is cleaned and cut", () => {
             st.profile ? st.profile.skip.map(s => s.reason) : []).filter(x => x !== null);
         texts.forEach(x => assert.ok(typeof x === "string" && SB.cleanText(x, 1000) === x && Array.from(x).length <= SB.LIMITS.detail, f + ": " + JSON.stringify(x)));
     });
+});
+
+/* ---------- when a list of findings is complete ---------- */
+
+/* The shared fixtures test/fixtures/status/ext-complete-*.json: Host Settings keeps byte-identical
+   copies, and its notifier must find the same complete and total for each. Every one is the
+   Security Monitor's check "exposure", checked and in time at NOW, and its item; A is
+   port.5432-tcp and B port.6379-tcp, the two findings ext-good-security.json lists completely, so
+   each of them can follow that answer. Only a complete list says that a finding missing from it is
+   gone. */
+const FID_A = "port.5432-tcp";
+const FID_B = "port.6379-tcp";
+const COMPLETE = {
+    /* counts one, lists none: A and B stay as they were */
+    "ext-complete-total-1-empty.json": { complete: false, total: 1, fids: [], dropped: 0 },
+    /* counts two, lists A: B stays as it was */
+    "ext-complete-total-2-one.json": { complete: false, total: 2, fids: [FID_A], dropped: 0 },
+    /* counts none, lists none, its check checked and in time: A and B are gone */
+    "ext-complete-total-0-checked.json": { complete: true, total: 0, fids: [], dropped: 0 },
+    /* no total: as before, the length of the list */
+    "ext-complete-no-total.json": { complete: true, total: 2, fids: [FID_A, FID_B], dropped: 0 },
+    /* B breaks the rules, a duplicate of A, B past the limit of 100: never complete */
+    "ext-complete-invalid-entry.json": { complete: false, total: 1, fids: [FID_A], dropped: 1 },
+    "ext-complete-duplicate-fid.json": { complete: false, total: 1, fids: [FID_A], dropped: 1 },
+    "ext-complete-over-100.json": { complete: false, total: 100, fids: null, dropped: 1 },
+};
+const rawDoc = file => json("status/" + file);
+const findingsOf = doc => SB.validateStatus(JSON.stringify(doc), "security").status.items[0].findings;
+
+t("complete: every shared fixture has its expectation", () => {
+    assert.deepStrictEqual(statusFiles.filter(f => f.startsWith("ext-complete-")), Object.keys(COMPLETE).sort());
+});
+
+for (const [file, want] of Object.entries(COMPLETE)) {
+    t("complete: " + file, () => {
+        const st = ext(file);
+        const f = st.items[0].findings;
+        assert.deepStrictEqual([f.complete, f.total, st.extDropped], [want.complete, want.total, want.dropped]);
+        if (want.fids) assert.deepStrictEqual(f.list.map(x => x.fid), want.fids);
+        assert.deepStrictEqual(st.checks.map(c => [c.id, c.state, c.item]), [["exposure", "checked", "exposure"]]);
+        assert.deepStrictEqual(SB.checksCoverage(st, NOW).coverage, "checked", "the check is in time: only the list decides");
+        assert.strictEqual(rawDoc(file).items[0].findings.complete, true, "every one of them says complete");
+    });
+}
+
+t("complete: past the limit of 100 the rest is left out, B with it", () => {
+    const f = ext("ext-complete-over-100.json").items[0].findings;
+    assert.deepStrictEqual([f.list.length, f.list[0].fid, f.list.some(x => x.fid === FID_B)], [SB.MAX_FINDINGS, FID_A, false]);
+    const sent = rawDoc("ext-complete-over-100.json").items[0].findings.list;
+    assert.deepStrictEqual([sent.length, sent[sent.length - 1].fid], [SB.MAX_FINDINGS + 1, FID_B]);
+});
+
+t("complete: each fixture is complete without the one thing it tests", () => {
+    const fix = (file, change) => {
+        const doc = rawDoc(file);
+        change(doc.items[0].findings, doc);
+        return findingsOf(doc);
+    };
+    assert.deepStrictEqual(fix("ext-complete-total-1-empty.json", f => { delete f.total; }), { complete: true, total: 0, list: [] });
+    assert.strictEqual(fix("ext-complete-total-2-one.json", f => { f.total = 1; }).complete, true);
+    assert.strictEqual(fix("ext-complete-invalid-entry.json", f => { f.list.pop(); }).complete, true);
+    assert.strictEqual(fix("ext-complete-duplicate-fid.json", f => { f.list.pop(); }).complete, true);
+    assert.strictEqual(fix("ext-complete-over-100.json", f => { f.list.pop(); }).complete, true);
+    assert.strictEqual(fix("ext-complete-no-total.json", f => { f.total = 2; }).complete, true, "a total that agrees");
+    /* and the rules that were there before still hold */
+    assert.strictEqual(fix("ext-complete-total-0-checked.json", (f, doc) => { doc.checks[0].state = "partial"; }).complete, false, "a check done in part");
+    assert.strictEqual(fix("ext-complete-total-0-checked.json", (f, doc) => { doc.checks[0].item = "elsewhere"; }).complete, false, "no check that owns the item");
+    assert.strictEqual(fix("ext-complete-total-0-checked.json", f => { f.complete = false; }).complete, false, "the add-on does not say so");
+});
+
+t("complete: a whole-number total past the findings taken over, whatever its size", () => {
+    /* ext-complete-no-total.json (A and B, complete) with this total */
+    const withTotal = total => {
+        const doc = rawDoc("ext-complete-no-total.json");
+        doc.items[0].findings.total = total;
+        const f = findingsOf(doc);
+        return [f.complete, f.total, f.list.length];
+    };
+    assert.deepStrictEqual(withTotal(3), [false, 3, 2]);
+    assert.deepStrictEqual(withTotal(SB.MAX_TOTAL), [false, SB.MAX_TOTAL, 2]);
+    assert.deepStrictEqual(withTotal(SB.MAX_TOTAL + 1), [false, 2, 2], "past the limit the total is not kept, and the list still is not complete");
+    /* a total that is no whole number is left out, as before: the length of the list */
+    for (const odd of ["3", -1, 2.5, null, true, [3], { n: 3 }]) {
+        assert.deepStrictEqual(withTotal(odd), [true, 2, 2], JSON.stringify(odd));
+    }
+    assert.deepStrictEqual(withTotal(1), [true, 2, 2], "fewer than listed: the length of the list");
+    assert.deepStrictEqual(withTotal(0), [true, 2, 2]);
+    /* JSON has no integers of its own: 3.0 is the whole number 3 (Python reads it as a float) */
+    const text = read("status/ext-complete-no-total.json").replace("\"complete\": true,", "\"complete\": true, \"total\": 3.0,");
+    assert.ok(text.includes("\"total\": 3.0,"));
+    const f = SB.validateStatus(text, "security").status.items[0].findings;
+    assert.deepStrictEqual([f.complete, f.total], [false, 3]);
 });
 
 /* ---------- only what needs attention ---------- */
@@ -1029,6 +1130,19 @@ t("buildTasks: hostile findings stay data", () => {
     assert.deepStrictEqual(m.accepted, []);
     assert.strictEqual(m.tasks.find(x => x.kind === "finding" && x.finding.fid === "odd").link, "", "a link that leaves the page is none");
     assert.ok(({}).constructor === Object && Object.prototype.polluted === undefined);
+});
+
+t("buildTasks: the evidence of a finding says complete only for a complete list", () => {
+    const tasksFor = file => tasksOf(SB.buildBoard([okHost("h", true, [["security", "security"]], { security: status(file) })], NOW)).tasks
+        .filter(x => x.pkg === "security");
+    const evidence = file => tasksFor(file).filter(x => x.kind === "finding").map(x => [x.finding.fid, x.evidence.complete]);
+    assert.deepStrictEqual(evidence("ext-complete-no-total.json"), [[FID_B, true], [FID_A, true]]);
+    assert.deepStrictEqual(evidence("ext-complete-total-2-one.json"), [[FID_A, false]]);
+    assert.deepStrictEqual(evidence("ext-complete-invalid-entry.json"), [[FID_A, false]]);
+    /* counts one and lists none: the item stays a task, in its own state */
+    assert.deepStrictEqual(tasksFor("ext-complete-total-1-empty.json").map(x => [x.kind, x.state, x.title]),
+        [["item", "danger", "Reachable from the internet"]]);
+    assert.deepStrictEqual(tasksFor("ext-complete-total-0-checked.json"), [], "counts none, lists none: nothing to do");
 });
 
 /* ---------- a host's target profile ---------- */

@@ -288,10 +288,13 @@ when `features` names them (`validateExtension()`): `status.features`, `status.c
 `item.findings`, `status.profile` (only from Host Settings), and `status.extDropped` for what it
 left out. Every list is bounded (50 checks, 100 findings per answer, 10 roles, 100 expectations,
 50 skips), ids are kept in `Set`s and `Map`s, never as keys of plain objects, and a list counts as
-complete only with a `checked` check naming its item. `evaluate()` takes an item's state from
-`itemState()`: never better than its open findings. The coverage uses the checks, the tab Needs
-attention the findings, and the expectation the profile (above). `test/fixtures/status/ext-*.json`
-are the good, broken, hostile and incompatible answers.
+complete only with a `checked` check naming its item, every entry taken over and no whole-number
+`total` above the findings taken over (contract, "A list is complete"). `evaluate()` takes an
+item's state from `itemState()`: never better than its open findings. The coverage uses the
+checks, the tab Needs attention the findings, and the expectation the profile (above).
+`test/fixtures/status/ext-*.json` are the good, broken, hostile and incompatible answers;
+`ext-complete-*.json` among them are the cases of a complete list that Host Settings keeps
+byte-identical copies of.
 
 **Versions.** A tile names the add-on's version in its facts. `buildBoard()` compares the versions
 of the same add-on on all hosts (`compareVersions()`: three numbers, a suffix such as `~dev…` or

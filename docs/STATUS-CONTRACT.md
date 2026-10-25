@@ -184,8 +184,8 @@ profile what that host is expected to have ([INTERNALS.md](INTERNALS.md), "Expec
 | `checks[].checked_at`, `stale_after`, `link` | as for items | left out |
 | `checks[].reason` | text, cut to 200: why it is not `checked` | left out |
 | `items[].findings` | an object `{complete, total, list}` | left out and counted |
-| `findings.complete` | `true` only when `list` holds every finding of the item | (required) |
-| `findings.total` | how many there are, listed or not | the length of `list` |
+| `findings.complete` | `true` only when `list` holds every finding of the item (see "A list is complete" below) | (required) |
+| `findings.total` | how many there are, listed or not: a whole number from the length of `list` to 1,000,000 | the length of `list` |
 | `findings.list` | at most 100 findings per answer, over all items; more are left out | left out and counted |
 | `list[].fid` | `^[a-z0-9][a-z0-9._:-]{0,63}$`, once per answer | the finding is left out |
 | `list[].state` | one of the five states | the finding is left out |
@@ -212,10 +212,24 @@ instead: `h-` and 16 hex digits of an HMAC-SHA256 with a random key the add-on k
 the host. Like every other text of the answer, titles name no IP addresses, user names, URLs or
 paths.
 
-- **A list is complete** only when the add-on says so and a check of state `checked` names the
-  item in `item`; a list with findings left out, or one without such a check, counts as not
-  complete. Only a complete list says that a finding missing from it is gone; anything else
-  (a check that failed, ran in part, is out of date, an answer cut short) says nothing about it.
+- **A list is complete** only when all of this holds:
+  - the add-on says so (`"complete": true`);
+  - a check of state `checked` names the item in `item`;
+  - every entry of `list` was taken over: none broke the rules, came twice or went past the limit
+    of 100 findings per answer;
+  - `total`, where it is a whole number, is not greater than the number of findings taken over.
+    `{"complete": true, "total": 1, "list": []}` and `{"complete": true, "total": 2, "list": [A]}`
+    are not complete; neither is a list whose `total` lies past 1,000,000 (that total is not
+    kept). A `total` that is no whole number is left out as the table says: the length of
+    `list`, and the list counts as the rules above decide. An answer without `total` counts the
+    same way.
+
+  Only a complete list says that a finding missing from it is gone; anything else (a check that
+  failed, ran in part, is out of date, an answer cut short, a total the list does not reach) says
+  nothing about it. Host Settings' notifier reads the same answers and judges them alike: the
+  answers `test/fixtures/status/ext-complete-*.json` are shared with it byte for byte, one per
+  case (counts one and lists none, counts two and lists one, counts none with its check
+  `checked`, no `total`, an entry that breaks the rules, a `fid` twice, more than 100 findings).
 - **An item is never better than its open findings:** the board takes the most severe state of the
   item and of its findings that are not accepted, or whose `accepted_until` has passed. An add-on
   may keep accepted findings out of the item's state (Update Gaps does), but it keeps them in the
