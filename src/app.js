@@ -25,7 +25,8 @@
  * on another host. Above both tabs, and below each host's name, the page says how many of the
  * add-ons a host is expected to have answered in time with something rated (coverage), whatever
  * the switch; below each host's name also its roles from the target profile that its Host
- * Settings sends, or that it has none.
+ * Settings sends, or that it has none, and folded the areas the suite does not cover yet (planned:
+ * never counted, never a task).
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -287,9 +288,9 @@
         try { window.localStorage.setItem(NOTABLE_KEY, on ? "1" : "0"); } catch (_) { /* no storage */ }
     }
 
-    /* open: the tiles whose entries are folded out, by data-key; folds: the folded sections of the
-       tasks that are open ("accepted", "notapplicable"); both stay open across loads. tab: the tab
-       shown, from the location. */
+    /* open: the tiles whose entries are folded out, by data-key; folds: the folded sections that
+       are open (of the tasks "accepted", "notapplicable"; of a host "limits:" and its key); both
+       stay open across loads. tab: the tab shown, from the location. */
     const state = { loading: false, loadedAt: 0, hosts: [], alerts: [], open: new Set(), folds: new Set(), onlyNotable: readOnlyNotable(), tab: "tasks" };
 
     /* The tab is part of the page's location, as Cockpit's own pages keep theirs: #/tasks (also
@@ -388,11 +389,14 @@
 
     /* The coverage of the board, above both tabs and outside the switch: how many of the add-ons
        the hosts are expected to have answered in time with something rated, what keeps the others
-       from it, how many hosts could not be read, and as a notice how many send no target profile.
-       Hidden while no host has an add-on with a status (the empty state says so). */
+       from it, how many hosts could not be read, and as a notice how many send no target profile;
+       last, as a neutral chip, how many areas the suite does not cover yet (planned, on the hosts
+       tab below each host's name). Hidden while no host has an add-on with a status (the empty
+       state says so). */
     function renderCoverage(rows, nothing) {
         const c = SB.coverageSummary(rows);
         const noProfile = rows.filter(r => r.noProfile).length;
+        const limited = rows.find(r => r.limits);
         const box = $("coverage");
         box.hidden = nothing || (c.total === 0 && c.unread === 0);
         if (box.hidden) {
@@ -407,7 +411,36 @@
             gaps,
             c.unread ? label(c.unreadState, T.coverageHosts(c.unread)) : null,
             noProfile ? label("info", T.coverageNoProfile(noProfile)) : null,
-            !state.loading && !gaps.length && !c.unread ? label("ok", T.coverageComplete) : null);
+            !state.loading && !gaps.length && !c.unread ? label("ok", T.coverageComplete) : null,
+            limited ? h("span", { class: "sb-chip sb-coverage__limits" }, T.limitsToggle(limited.limits.length)) : null);
+    }
+
+    /* What the suite does not cover yet on a host (row.limits), below its coverage line: a toggle
+       that names the number of areas as planned, and while it is open each area with what is
+       missing and, where an add-on on that host covers a part of it, that part. Only texts of the
+       page; it counts nowhere and is no task. It stays whatever the switch, as the coverage line
+       does, and stays open when the board loads again (state.folds). */
+    function renderLimits(row, index) {
+        if (!row.limits) return null;
+        const id = "limits:" + row.host.key;
+        const open = state.folds.has(id);
+        const bodyId = "limits-" + index;
+        return h("div", { class: "sb-limits", "data-limits": row.host.key },
+            h("button", {
+                class: "az-btn az-btn--link az-btn--sm sb-limits__toggle", type: "button", "data-focus": id,
+                "aria-expanded": open ? "true" : "false", "aria-controls": open ? bodyId : null,
+                onclick: () => {
+                    if (state.folds.has(id)) state.folds.delete(id);
+                    else state.folds.add(id);
+                    render();
+                },
+            }, icon(open ? "angle-down" : "angle-right"), h("span", null, T.limitsToggle(row.limits.length))),
+            open ? h("div", { class: "sb-limits__body", id: bodyId },
+                h("p", { class: "sb-limits__note" }, T.limitsNote),
+                h("dl", { class: "sb-limits__list" }, row.limits.map(l => [
+                    h("dt", { class: "sb-limits__area", "data-area": l.area }, T.limitAreas[l.area]),
+                    h("dd", { class: "sb-limits__text" }, T.limitGaps[l.area],
+                        l.part ? h("span", { class: "sb-limits__part" }, T.limitParts[l.area]) : null)]))) : null);
     }
 
     /* One gap: "Cron Jobs: no access", or with the check that shows it, "Security Monitor:
@@ -596,6 +629,7 @@
                 sub ? h("span", { class: "az-meta" }, sub) : null,
                 rowLabel(row)),
             hostCoverage(row),
+            renderLimits(row, index),
             tiles.length ? h("div", { class: "sb-tiles" }, tiles.map(t => renderTile(host, t, nextId())))
                 : quiet ? null : h("p", { class: "sb-note" }, note));
     }

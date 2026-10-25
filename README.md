@@ -19,6 +19,7 @@ and changes nothing on any host; a click on a tile opens the add-on on its host.
 - [How it works](#how-it-works)
 - [Requirements](#requirements)
 - [Install, update, uninstall](#install-update-uninstall)
+- [From install to a resolved task](#from-install-to-a-resolved-task)
 - [Trying it on the bastion](#trying-it-on-the-bastion)
 - [Safety](#safety)
 - [Translations](#translations)
@@ -44,9 +45,14 @@ of the address (`#/tasks`, `#/hosts`), so Back, a reload and a bookmark keep it.
   then what is known to be exploited, then older before newer; a finding of the last day is
   marked "new". Each task says why it stands there ("reachable from the internet", "fix
   available"), since when, its evidence ("Checked 20:50, complete") and what resolves it, and its
-  button opens the add-on on its host at that place. Below, folded: findings accepted for a time,
-  with the day the acceptance ends (accepted is never resolved), and checks that do not apply,
-  with their reason and whether the add-on or the host's target profile left them out.
+  button opens the add-on on its host at that place. The evidence says complete only where the
+  add-on's check ran fully and in time and, where it sends findings, its list of them is complete.
+  Below, folded: findings accepted for a time, with the day the acceptance ends (accepted is never
+  resolved), and checks that do not apply, with their reason and whether the add-on or the host's
+  target profile left them out. Single findings and acceptances come only from add-ons that send
+  them: that the board reads `accepted_until` does not make every add-on send findings or
+  acceptances. Cron Jobs, Image Update Monitor and Update Gaps send none yet, so their entries stay
+  "summary only", and what is acknowledged in Update Gaps shows only in the state of its entry.
 - **One row per host,** in the order of the host switcher, this host first. The row's header names
   the host, the connection when it differs (`admin@web1`, `db1:2222`) and the most severe state of
   its add-ons, or why the host cannot be read ("Unreachable", "Key locked").
@@ -82,6 +88,14 @@ of the address (`#/tasks`, `#/hosts`), so Back, a reload and a bookmark keep it.
 - **Without a target profile** a host counts every installed add-on with a status as expected and
   every other one as not expected, as before; its line and a notice in Needs attention say "No
   target profile", never as a warning.
+- **Not covered yet:** below each host's coverage line a fold, "5 areas not covered yet (planned)",
+  names what no add-on of the suite checks yet: a proof of backup and restore across the suite,
+  all known vulnerabilities, the lifecycle of TLS certificates, configuration drift and identity
+  checks. Where an add-on on that host covers a part, it says which: Image Update Monitor keeps
+  database dumps and image rollbacks from before an update, on that host only; Update Gaps shows
+  CVE data for selected Ubuntu packages (with its network data); Security Monitor shows SSH keys
+  and the logins of the last 14 days. These areas are planned scope: they never count as checked,
+  never as a gap, and never make a task. The coverage above both tabs names them as a neutral chip.
 - **Every entry of a tile:** "All 5 entries" opens what the add-on reports in a panel below the
   row, a table with each entry's name, value, label and detail. An entry with a place in the
   add-on opens it on a click (the Security Monitor's SSH, for example), not only the key figure's.
@@ -98,14 +112,22 @@ of the address (`#/tasks`, `#/hosts`), so Back, a reload and a bookmark keep it.
 
 A tile in OK means that the add-on found nothing in what it checks, not that the host is safe.
 
+![Needs attention: the tasks of all hosts by state, each with its reasons, its evidence and a button into the add-on; below, accepted findings and checks that do not apply](docs/img/tasks.png)
+
+![Hosts and coverage with target profiles: each host's roles and coverage, and for web1 the areas the suite does not cover yet, folded out](docs/img/coverage.png)
+
 ![Only what needs attention, with the entries of the Security Monitor folded out](docs/img/board-details.png)
 
 | ![The same board in Cockpit's dark style](docs/img/board-dark.png) | ![The board on a phone](docs/img/board-phone.png) |
 |---|---|
 
-The screenshots come from the browser tests (`test/ui_test.py`, scenario `real`): the answers that
-Cron Jobs 2.9.0, Image Update Monitor 0.24.1, Update Gaps 0.6.0 and Security Monitor 0.2.0 give
-on their own test data. Each test run keeps them as `readme-board*.png` in the artifact
+The screenshots come from the browser tests (`test/ui_test.py`). The board, its entries, the dark
+style and the phone show scenario `demo`: the answers that Cron Jobs 2.9.0, Image Update Monitor
+0.24.1, Update Gaps 0.6.0 and Security Monitor 0.2.0 give on their own test data (scenario
+`real`). Needs attention and the coverage with target profiles show scenario `demo-tasks`: answers
+with checks, findings and a target profile (scenario `tasks`). The hosts of the tests have neutral
+names (web1, ci1, db1, bastion), and the user and what runs on the hosts get neutral names in place
+of the recorded ones. Each test run keeps the pictures as `readme-*.png` in the artifact
 `screenshots`.
 
 ## How it works
@@ -146,6 +168,27 @@ tested system by itself.
 | **Recorded** | Cron Jobs 2.9.0, Image Update Monitor 0.24.1, Update Gaps 0.6.0, Security Monitor 0.2.0 | their status answers in English and German (`test/fixtures/status/real-*.json`), read by the offline and the browser tests |
 | **Package installs** | Debian 13 (`.deb`), Fedora 43 (`.rpm`) (job `test`); Rocky Linux and AlmaLinux 9 and 10 (`.rpm`, for RHEL 9 and 10; job `install`) | the package installs with the distribution's own Cockpit and removes cleanly; no Cockpit runs there |
 | **Expected, untested** | other versions of Debian, Ubuntu and Fedora, RHEL and openSUSE, with a Cockpit as current as the tested ones | the board in a real Cockpit there; the packages on Ubuntu, RHEL itself and openSUSE |
+
+### The suite at a glance
+
+What the board shows is only as good as the add-ons on each host. Summed up from the tables
+"Supported systems" in each add-on's README, which are the reference. A functional check means
+the add-on did its real work there in CI; a package that installs is not a supported system by
+itself, and nothing is checked on a system that only installs the package.
+
+| Add-on | Functional checks in CI | Package installs only (nothing checked there) | Not supported, or checks nothing |
+|---|---|---|---|
+| Status Board | Ubuntu 24.04 with Cockpit from its backports and other hosts over SSH; the page against a stand-in for Cockpit in Chromium | Debian 13, Fedora 43, Rocky Linux and AlmaLinux 9 and 10 | |
+| Host Settings | Ubuntu 24.04 with systemd, ntfy and postfix; Rocky Linux 9.8 and 10.2 with SELinux enforcing | Debian 13, Fedora 43, AlmaLinux 9 and 10 | |
+| Update Gaps | Ubuntu 24.04 in a real Cockpit; its checks on Debian 12 and 13 and Ubuntu 22.04, 24.04 and 26.04 in containers | Fedora 43, Rocky Linux 9 and 10 | Fedora, RHEL and openSUSE: the package installs, but the add-on checks nothing there (apt systems only); releases and the package repository carry no `.rpm` |
+| Security Monitor | Ubuntu 24.04 with UFW, fail2ban and Docker; recordings of four Ubuntu servers | Debian 13, Fedora 43 | Fedora, RHEL and openSUSE: not supported yet; releases carry no `.rpm`, and the package repository serves it for Debian and Ubuntu only |
+| Image Update Monitor | Ubuntu 24.04 with Docker Engine and Compose, and in a real Cockpit | Debian 12 and 13, Ubuntu 22.04, Fedora 43, Rocky Linux and AlmaLinux 9 and 10, openSUSE Leap 16.0 | Podman, Compose 1.x and below 2.8, Swarm, Kubernetes, rootless Docker, systems without systemd |
+| Cron Jobs | Ubuntu 24.04 with its own Cockpit and the one of its backports; Rocky Linux 9 and 10 with cronie and SELinux enforcing | Debian 13, Fedora 43, AlmaLinux 9 and 10 | BusyBox cron (Alpine) |
+
+Beyond these columns each README names the systems that are expected to work but untested (for
+most add-ons Debian 12 and 13 and Ubuntu 22.04 or newer, with Cockpit 264 or newer); they have not
+been shown to work. A Fedora, RHEL or openSUSE host may carry the packages of Update Gaps and
+Security Monitor, but neither add-on checks anything there, so they cover nothing on such a host.
 
 ## Install, update, uninstall
 
@@ -207,6 +250,33 @@ Cockpit again.
 
 **Uninstall:** `sudo apt remove cockpit-status-board` or `sudo dnf remove cockpit-status-board`.
 The board keeps no data on any host; only the browser keeps the switch "Only what needs attention".
+
+## From install to a resolved task
+
+A short walk through the suite for a host behind the bastion, here web1 with the role `web`:
+
+1. **Install.** The board on the bastion; on web1 Host Settings and the add-ons (Update Gaps,
+   Security Monitor, Cron Jobs, and for `web` Image Update Monitor), from the package repository,
+   on a system from [the suite at a glance](#the-suite-at-a-glance). Each add-on checks once by
+   itself; set up its regular check on its page where it asks for it.
+2. **Target profile.** In Host Settings on web1, under Target profile, choose the role `web`, and
+   leave out a single check with a reason where it does not apply. The board shows "Role web"
+   below the host's name and counts what the profile expects; an expected add-on that is missing
+   is a warning, "Image Update Monitor is missing".
+3. **Messages and watchdog.** In Host Settings, set up ntfy or e-mail and the regular check, so
+   that a change reaches you while the board is closed. Then the heartbeat to an external watchdog
+   (Uptime Kuma or Healthchecks) that runs outside the hosts it watches: the heartbeat says that the
+   notifier ran and delivered, not that the host is fine, and the watchdog alarms when it stops.
+   Host Settings adds the heartbeat in a later version; its README says how to set it up.
+4. **A task.** On the board, Needs attention lists what to do, for example "5432/tcp postgres" on
+   web1, reachable from the internet, with its evidence ("Checked 20:50, complete") and what
+   resolves it. Host Settings tells the same finding once, as it appears.
+5. **The add-on.** The task's button opens the Security Monitor on web1 at that port. Fix it there,
+   or mark the port as expected; details that need administrative access stay in the add-on, and
+   the board itself changes nothing.
+6. **Check again.** Once the add-on's next check ran fully, without the finding, the task is gone
+   and Host Settings tells it as resolved. A check that failed, ran in part or is out of date
+   resolves nothing: the finding stays, and a gap in the coverage says why.
 
 ## Trying it on the bastion
 
@@ -273,9 +343,9 @@ make packages     # dist/*.deb and dist/*.rpm (needs dpkg-deb and rpmbuild), rep
 ```
 
 `python3 test/serve.py` serves the page with the stand-in at
-`http://127.0.0.1:8773/pkg/status-board/index.html` (`?scenario=real`, `tasks`, `edge`, `hostile`, `broken`
-or `empty`, `?lang=en`). The fixtures in `test/fixtures` are written for 2026-10-19 19:00 UTC; the browser
-tests set their clock to it. The shared design files in `src/` are byte-identical copies from
+`http://127.0.0.1:8773/pkg/status-board/index.html` (`?scenario=real`, `demo`, `tasks`, `demo-tasks`,
+`expected`, `limits`, `edge`, `hostile`, `broken` or `empty`, `?lang=en`). The fixtures in `test/fixtures` are written for
+2026-10-19 19:00 UTC; the browser tests set their clock to it. The shared design files in `src/` are byte-identical copies from
 Cron Jobs (`tools/design-files.sha256`); never change them here.
 
 **End-to-end test.** CI runs `test/e2e_cockpit.py` as the job `e2e`, against a real Cockpit from
@@ -327,6 +397,9 @@ More in [CONTRIBUTING.md](CONTRIBUTING.md).
 - A check that a target profile names (`security/exposure`) makes its add-on expected, but the
   board judges coverage per add-on: a named check the add-on does not report at all is no gap of
   its own.
+- The suite does not check everything a host needs: a proof of backup and restore across the
+  suite, all known vulnerabilities, the lifecycle of TLS certificates, configuration drift and
+  identity checks are planned. The board names them below each host and counts them nowhere.
 
 ## License
 

@@ -154,8 +154,10 @@ addresses", "known to be exploited", "fix available", "summary only", "findings 
 gap of a host with a target profile "expected for role web" or "not expected here"), what the
 add-on or the page says about it, and three facts: since when, the evidence ("Checked 20:50,
 complete": the time of the check that owns the item, else the item's, else the answer's; complete
-or partial only where a check owns the item, from `findings.complete` for a finding), and what
-resolves it. Its button opens the add-on on its host through `jumpTo()`, with the same checks as a
+or partial only where a check owns the item, from `findings.complete` for a finding; for an item,
+complete only while its check is `checked` and in time and, where the item has findings, its list
+is complete as well, so an answer with `"complete": true, "total": 1, "list": []` gives its item
+"partial"), and what resolves it. Its button opens the add-on on its host through `jumpTo()`, with the same checks as a
 tile: at the finding's link, else its item's; at the item's link; at the gap check's link, else the
 link of its item; for a gap without checks at the key item's link; for a host its Overview; for
 "No target profile" the start of the host's Host Settings, where it is installed. A missing add-on
@@ -287,6 +289,31 @@ checked"), then the profile's roles as neutral chips ("Role web") or the notice 
 profile". A single item in state `none` is no gap: Cron Jobs uses it for jobs without recording and
 Image Update Monitor for no pending roll-out, so version 1 of the contract cannot tell "nothing to
 rate" from "could not check"; only a check in state `partial` says that.
+
+**Not covered yet** (`LIMIT_AREAS`, `limitsOf()` in `lib/status.js`, `row.limits`): five areas no
+add-on of the suite checks yet, planned for later versions: a proof of backup and restore across the
+suite, all known vulnerabilities, the lifecycle of TLS certificates, configuration drift and identity
+checks. Every row of a host that could be read, while the board has tiles, carries them; a host that
+cannot be read or is still loading carries none. Where an add-on that covers a part is installed on
+that host (its manifest is there, in whatever version), the area names that part: Image Update
+Monitor (`image-updates`) keeps database dumps and image rollbacks from before an update, on that
+host only; Update Gaps (`update-gaps`) shows CVE data for selected Ubuntu packages, with its network
+data; Security Monitor (`security`) shows SSH keys and the logins of the last 14 days. The page shows
+them below the host's coverage line as a fold, "5 areas not covered yet (planned)", closed at first,
+and on opening each area with what is missing and that part, in a dashed outline without labels of
+a state; above both tabs the coverage carries the same words as a neutral chip. The texts are the
+page's own; nothing of a host goes into them but which packages it has. They are no tile, no check
+and no gap: no figure of the coverage, no state of a row and no task counts them, and they stay with
+"Only what needs attention" and open across loads (`state.folds`, `limits:` and the host's key).
+
+**From one answer to the next** (contract, "From one answer to the next"): an add-on a host's profile
+expects always counts in that host's coverage, also where no host reports it with a status entry
+(above, "Expectation"); a list of findings is complete only when a whole-number `total` does not
+exceed the findings taken over; and data that is missing, broken or not complete never resolves a
+finding known before. The board keeps no state, so it only shows what the answer in hand proves: a
+list that is not complete gives no "complete" evidence, for its findings nor for its item. Keeping
+known findings open across such answers, also after a downgrade to a version without findings, is
+the work of Host Settings' notifier, which reads the same answers with the same rules.
 
 **Checks, findings, profile** (the optional parts of the contract): `validateStatus()` reads them
 when `features` names them (`validateExtension()`): `status.features`, `status.checks`,

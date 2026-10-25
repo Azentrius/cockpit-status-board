@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 /* Stand-in for cockpit.js in the browser tests of Status Board.
  *
- * A bastion (this host, "vpn-host") with the host switcher's list and hosts behind it. What the
+ * A bastion (this host, "bastion") with the host switcher's list and hosts behind it. What the
  * hosts answer comes from test/fixtures (window.__FIXTURES, put in front of this file by
  * test/serve.py): the manifests, and the output of each add-on's status verb, the German one
  * when there is a .de.json and the page asks with --lang de.
  *
- * Query parameters: scenario=default|real|tasks|expected|edge|hostile|broken|empty, chunk (characters per streamed chunk), badhosts=1 (the invalid names of the
- * machines fixture stay in the list), delay (ms per answer). Tests change window.__mock at run
- * time and read what the page did from it: calls, jumps, watches, unexpected, locations (every
- * cockpit.location.go()). The page's location is its hash (#/hosts), as in Cockpit. */
+ * Query parameters: scenario=default|real|demo|tasks|demo-tasks|expected|limits|edge|hostile|broken|empty,
+ * chunk (characters per streamed chunk), badhosts=1 (the invalid names of the machines fixture stay
+ * in the list), delay (ms per answer). demo and demo-tasks are real and tasks with neutral names
+ * (NEUTRAL) instead of the recorded ones: the README's screenshots. Tests change window.__mock at
+ * run time and read what the page did from it: calls, jumps, watches, unexpected, locations (every
+ * cockpit.location.go()); names says what the scenario replaces. The page's location is its hash
+ * (#/hosts), as in Cockpit. */
 (function () {
     "use strict";
     const params = new URLSearchParams(location.search);
@@ -39,28 +42,52 @@
         return m;
     }
 
+    /* The scenarios demo and demo-tasks put these names, in this order, in place of the names in
+       the recordings of real hosts: the user, and the jobs, containers and services on them (the
+       hosts of the switcher's list have neutral names already: web1, ci1, db1, this host
+       bastion). Plain replacements of text; none of them touches a key of the status contract, a
+       manifest (the Image Update Monitor's command keeps diun-update.py) or a fixture's name. */
+    const NEUTRAL = [
+        ["stefan", "admin"],
+        ["backup-db-7c1e", "nightly-backup"], ["ollama", "search"], ["prod-mcp-1", "prod-api-1"],
+        ["docuseal", "shop"], ["glitchtip", "tracker"], ["plausible_db", "stats_db"], ["actual-ai", "cache"],
+        ["actual_server", "app_server"], ["calcom-db", "calendar-db"], ["21115/tcp relay-id", "8443/tcp https-alt"],
+    ];
+    const rename = (names, text) => names.reduce((t, [from, to]) => t.split(from).join(to), text);
+
+    /* A scenario with the neutral names in the switcher's list (keys, addresses, users, labels), in
+       the connections and in the host names; the answers follow through M.rewrite. */
+    function neutral(s) {
+        const hosts = {};
+        Object.keys(s.hosts).forEach(k => {
+            const h = s.hosts[k];
+            hosts[rename(NEUTRAL, k)] = h.hostname === undefined ? h : Object.assign({}, h, { hostname: rename(NEUTRAL, h.hostname) });
+        });
+        return { machines: JSON.parse(rename(NEUTRAL, JSON.stringify(s.machines))), hosts, names: NEUTRAL };
+    }
+
     const SCENARIOS = {
         /* The four hosts of the fixture that answer, and two that do not. */
         default: () => ({
             machines: machinesFixture(),
             hosts: {
-                localhost: host("vpn-host", Object.assign(cockpitPackages(), {
+                localhost: host("bastion", Object.assign(cockpitPackages(), {
                     cronjobs: pkg("cronjobs", "good-cronjobs-ok"),
                     "image-updates": pkg("image-updates", "good-image-updates"),
                 })),
-                "stefan@public-host": host("public-host", {
+                "stefan@web1": host("web1", {
                     system: pkg("system", null),
                     cronjobs: pkg("cronjobs", "good-cronjobs-danger"),
                     "image-updates": pkg("image-updates", "good-image-updates"),
                     "update-gaps": pkg("update-gaps", "good-update-gaps"),
                 }),
-                "build-host": host("build-host", {
+                "ci1": host("ci1", {
                     system: pkg("system", null),
                     cronjobs: pkg("cronjobs", { exit: 77, message: "" }),
                     "image-updates": pkg("image-updates", "good-image-updates-stale"),
                     "update-gaps": pkg("update-gaps-old", null),
                 }),
-                "claw-host:2222": host("claw-host", {
+                "db1:2222": host("db1", {
                     system: pkg("system", null),
                     cronjobs: pkg("cronjobs", "good-cronjobs-ok"),
                     "update-gaps": pkg("update-gaps", { exit: 1, message: "Traceback (most recent call last):\n  File \"/usr/lib/cockpit-update-gaps/gaps-status.py\", line 12\nPermissionError: [Errno 13] Permission denied" }),
@@ -69,9 +96,9 @@
                 "locked-host": { reach: "locked" },
             },
         }),
-        /* The four add-ons with the answers they give (status/real-*.json): all four on public-host,
+        /* The four add-ons with the answers they give (status/real-*.json): all four on web1,
            the Security Monitor on its recordings of the other hosts, the rest from the good
-           fixtures; the README's screenshots. */
+           fixtures. */
         real: () => {
             const machines = machinesFixture();
             delete machines["old-host"];
@@ -79,27 +106,27 @@
             return {
                 machines,
                 hosts: {
-                    localhost: host("vpn-host", Object.assign(cockpitPackages(), {
+                    localhost: host("bastion", Object.assign(cockpitPackages(), {
                         cronjobs: pkg("cronjobs", "good-cronjobs-ok"),
                         "image-updates": pkg("image-updates", "good-image-updates"),
                         security: pkg("security", "real-security-edge"),
                         "update-gaps": pkg("update-gaps", "good-update-gaps"),
                     })),
-                    "stefan@public-host": host("public-host", {
+                    "stefan@web1": host("web1", {
                         system: pkg("system", null),
                         cronjobs: pkg("cronjobs", "real-cronjobs"),
                         "image-updates": pkg("image-updates", "real-image-updates"),
                         security: pkg("security", "real-security"),
                         "update-gaps": pkg("update-gaps", "real-update-gaps"),
                     }),
-                    "build-host": host("build-host", {
+                    "ci1": host("ci1", {
                         system: pkg("system", null),
                         cronjobs: pkg("cronjobs", "good-cronjobs-ok"),
                         "image-updates": pkg("image-updates", "good-image-updates-stale"),
                         security: pkg("security", "real-security-ci"),
                         "update-gaps": pkg("update-gaps", "good-update-gaps"),
                     }),
-                    "claw-host:2222": host("claw-host", {
+                    "db1:2222": host("db1", {
                         system: pkg("system", null),
                         cronjobs: pkg("cronjobs", "good-cronjobs-ok"),
                         security: pkg("security", "real-security-ipv6"),
@@ -108,6 +135,9 @@
                 },
             };
         },
+        /* real and tasks with neutral names (NEUTRAL): the README's screenshots. */
+        demo: () => neutral(SCENARIOS.real()),
+        "demo-tasks": () => neutral(SCENARIOS.tasks()),
         /* The optional parts of the contract next to answers without them, for the tab "Needs
            attention": Security Monitor and Update Gaps with checks and findings (two ports
            reachable from the internet, a check done in part, an acceptance that runs and one that
@@ -115,19 +145,19 @@
            profile; Cron Jobs and Image Update Monitor as before (summary only, no access, out of
            date); a host that cannot be reached and one with a locked key. The profile (role web,
            five add-ons, update-gaps/cve left out) comes from Host Settings on this host, which
-           lacks three of the add-ons it expects, and on public-host, where Open CVEs is then not
-           applicable; build-host has no Host Settings, so no target profile. */
+           lacks three of the add-ons it expects, and on web1, where Open CVEs is then not
+           applicable; ci1 has no Host Settings, so no target profile. */
         tasks: () => {
             const machines = machinesFixture();
-            delete machines["claw-host"];
+            delete machines["db1"];
             return {
                 machines,
                 hosts: {
-                    localhost: host("vpn-host", Object.assign(cockpitPackages(), {
+                    localhost: host("bastion", Object.assign(cockpitPackages(), {
                         "host-settings": pkg("host-settings", "ext-good-host-settings"),
                         cronjobs: pkg("cronjobs", "good-cronjobs-ok"),
                     })),
-                    "stefan@public-host": host("public-host", {
+                    "stefan@web1": host("web1", {
                         system: pkg("system", null),
                         cronjobs: pkg("cronjobs", "good-cronjobs-danger"),
                         "image-updates": pkg("image-updates", "good-image-updates"),
@@ -135,7 +165,7 @@
                         "update-gaps": pkg("update-gaps", "ext-good-update-gaps"),
                         "host-settings": pkg("host-settings", "ext-good-host-settings"),
                     }),
-                    "build-host": host("build-host", {
+                    "ci1": host("ci1", {
                         system: pkg("system", null),
                         cronjobs: pkg("cronjobs", { exit: 77, message: "" }),
                         "image-updates": pkg("image-updates", "good-image-updates-stale"),
@@ -166,12 +196,27 @@
                 }),
             },
         }),
+        /* What the suite does not cover yet, and the evidence of an item with findings: this host
+           has the Security Monitor (its list counts one finding and lists none, so its item is a
+           task whose evidence is not complete), Update Gaps and Image Update Monitor, each of
+           which covers a part of an area; plain-host has Cron Jobs only, which covers none. */
+        limits: () => ({
+            machines: { "plain-host": { visible: true } },
+            hosts: {
+                localhost: host("bastion", Object.assign(cockpitPackages(), {
+                    security: pkg("security", "ext-complete-total-1-empty"),
+                    "update-gaps": pkg("update-gaps", "good-update-gaps"),
+                    "image-updates": pkg("image-updates", "good-image-updates"),
+                })),
+                "plain-host": host("plain-host", { system: pkg("system", null), cronjobs: pkg("cronjobs", "good-cronjobs-ok") }),
+            },
+        }),
         /* Package names that are also names of what every object inherits ("constructor"), and
            status output at and past the limit of 64 KiB, streamed in chunks; one host that is fine. */
         edge: () => ({
             machines: { "big-host": { visible: true }, "fine-host": { visible: true } },
             hosts: {
-                localhost: host("vpn-host", Object.assign(cockpitPackages(), {
+                localhost: host("bastion", Object.assign(cockpitPackages(), {
                     aaa: pkg("edge-aaa", { doc: { label: "Alpha", state: "info", items: [{ id: "a", state: "info", title: "A things", value: "1" }] } }),
                     constructor: pkg("edge-constructor", { doc: { label: "Constructor", state: "warning", items: [{ id: "c", state: "warning", title: "C things", value: "2" }] } }),
                 })),
@@ -190,7 +235,7 @@
                 "bidi-host": { visible: true },
             },
             hosts: {
-                localhost: host("vpn-host", Object.assign(cockpitPackages(), { cronjobs: pkg("cronjobs", "good-cronjobs-ok") })),
+                localhost: host("bastion", Object.assign(cockpitPackages(), { cronjobs: pkg("cronjobs", "good-cronjobs-ok") })),
                 "evil-host": host("evil-host", {
                     cronjobs: pkg("cronjobs", "hostile-markup"),
                     "image-updates": pkg("hostile-sh", "good-image-updates"),
@@ -215,7 +260,7 @@
                 "changedkey-host": { visible: true },
             },
             hosts: {
-                localhost: host("vpn-host", cockpitPackages()),
+                localhost: host("bastion", cockpitPackages()),
                 "broken-host": host("broken-host", {
                     cronjobs: pkg("cronjobs", { text: fixture("status/broken-not-json.txt") }),
                     "image-updates": pkg("image-updates", "broken-schema-2"),
@@ -233,7 +278,7 @@
         empty: () => ({
             machines: { localhost: { visible: true }, "quiet-host": { visible: true }, "old-host": { visible: true } },
             hosts: {
-                localhost: host("vpn-host", cockpitPackages()),
+                localhost: host("bastion", cockpitPackages()),
                 "quiet-host": host("quiet-host", { system: pkg("system", null) }),
                 "old-host": { reach: "no-host" },
             },
@@ -254,6 +299,10 @@
         watches: [],
         unexpected: [],
         locations: [],
+        /* [recorded, neutral] names the scenario replaces (demo, demo-tasks), in every answer from
+           the fixtures and in the bridge's message for a locked key */
+        names: scenario.names || [],
+        rewrite: text => rename(M.names, text),
         dbusOpen: 0,
         listeners: [],
         locationListeners: [],
@@ -277,7 +326,7 @@
     /* What the bridge sends when it cannot reach a host (src/cockpit/remote.py). */
     function closeOf(reach) {
         switch (reach) {
-        case "locked": return { problem: "authentication-failed", error: "locked identity: /home/stefan/.ssh/id_ed25519",
+        case "locked": return { problem: "authentication-failed", error: M.rewrite("locked identity: /home/stefan/.ssh/id_ed25519"),
                                 "auth-method-results": { publickey: "not-provided" } };
         case "no-host": return { problem: "no-host", message: "[Errno -2] Name or service not known" };
         default: return { problem: reach };
@@ -294,7 +343,7 @@
     function answer(status, lang, name) {
         if (typeof status === "string") {
             const de = "status/" + status + "." + lang + ".json";
-            return Object.prototype.hasOwnProperty.call(FIX, de) ? FIX[de] : fixture("status/" + status + ".json");
+            return M.rewrite(Object.prototype.hasOwnProperty.call(FIX, de) ? FIX[de] : fixture("status/" + status + ".json"));
         }
         if (!status) throw fail({ problem: "not-found", message: "" });
         if (status.text !== undefined) return status.text;

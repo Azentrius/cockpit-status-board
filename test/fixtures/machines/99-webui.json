@@ -3,20 +3,20 @@
     "visible": true,
     "color": "#0099d3"
   },
-  "public-host": {
-    "address": "public-host",
+  "web1": {
+    "address": "web1",
     "user": "stefan",
     "visible": true,
     "color": "#67d300"
   },
-  "build-host": {
-    "address": "build-host",
+  "ci1": {
+    "address": "ci1",
     "visible": true,
     "color": "#d39e00",
-    "label": "build-host (CI)"
+    "label": "ci1 (CI)"
   },
-  "claw-host": {
-    "address": "claw-host",
+  "db1": {
+    "address": "db1",
     "port": "2222",
     "visible": true,
     "color": "#d3007c"
