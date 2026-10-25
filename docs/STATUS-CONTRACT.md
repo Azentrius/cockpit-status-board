@@ -148,7 +148,9 @@ name is not read. What breaks the rules below is left out and counted, it never 
 unreadable. The board checks them (`validateStatus()`, `test/fixtures/status/ext-*.json`), lets
 open findings count for an item's state (below), takes an add-on's coverage from its checks, lists
 open findings as tasks ([INTERNALS.md](INTERNALS.md), "Needs attention") and takes from a host's
-profile what that host is expected to have ([INTERNALS.md](INTERNALS.md), "Expectation").
+profile what that host is expected to have ([INTERNALS.md](INTERNALS.md), "Expectation"). Of the
+add-ons, the Security Monitor sends checks and findings and Host Settings a host's profile; Cron
+Jobs, Image Update Monitor and Update Gaps send none of the optional parts yet.
 
 ```json
 {
@@ -256,6 +258,29 @@ and checks they expect, and checks left out on purpose. It names only its own ho
   host reports it with a status entry; it rates the gaps of an add-on the profile does not expect
   lower. Without a profile every installed add-on with a status entry counts as expected, and the
   host is marked as having none.
+
+**From one answer to the next.** The board and Host Settings' notifier read the same answers and
+keep to the same rules when an answer changes from one run to the next, so that nothing looks
+better than the data shows:
+
+- **Expected add-ons always count.** An add-on a host's profile expects counts in that host's
+  coverage whatever it answers: not installed (missing), installed in a version without the status
+  entry (not supported), or with a status that cannot be read, also where no other host reports
+  that add-on. It never drops out of the count because no host knows it.
+- **Complete means complete, `total` included.** A list counts as complete only as "A list is
+  complete" above says; one that counts more findings than it holds says nothing about those it
+  does not hold, and a finding known before stays as it was.
+- **Broken data resolves nothing.** When an answer drops `findings` for an item, sends `findings`
+  that break the rules or a list that is not complete, or comes from a version of the add-on
+  without the optional parts, a reader that knew single findings of that item keeps them as they
+  were; only a later complete list without a finding says that the finding is gone. A broken part
+  of one item does not hold back the findings of another item that arrived intact. An add-on that
+  never sent findings is judged by its items, as before. The board keeps no state between loads,
+  so this rule is the notifier's: Host Settings keeps its known findings this way.
+- **Reading `accepted_until` is not sending it.** That a reader supports acceptances does not make
+  an add-on send findings or acceptances. An add-on without the optional parts is judged by its
+  items alone, and the board marks its items "summary only"; an acknowledgement it keeps for
+  itself (as Update Gaps does) shows only in the state it gives its items.
 
 ## Optional: a state in Cockpit's menu
 
