@@ -997,6 +997,71 @@ with sync_playwright() as p:
     no_problems(page, "tasks, phone")
     page.context.close()
 
+    # ---------- every add-on a host's profile expects, installed or not (scenario expected) ----------
+    # board-host's profile (role build) expects Host Settings, Update Gaps and Image Update Monitor:
+    # Update Gaps is installed in a version without the status entry, and no host reports it with
+    # one; Image Update Monitor is not installed; Cron Jobs, only on web-host, is not expected there.
+    def expected_coverage(page):
+        lines = dict(page.evaluate("""() => Array.from(document.querySelectorAll('.sb-host')).map(s => {
+            const c = s.querySelector('.sb-host__header + .sb-host__coverage');
+            return [s.dataset.host, c ? [(c.querySelector('.sb-host__figure') || {}).innerText || null,
+                Array.from(c.querySelectorAll('.sb-host__profile > *')).map(x => [x.className, x.innerText.trim()])] : null]; })"""))
+        board = page.evaluate("""() => [document.querySelector('#coverage').hidden, document.querySelector('#coverage .sb-coverage__figure').innerText,
+            Array.from(document.querySelectorAll('#coverage .az-label')).map(l => [l.className, l.innerText.trim()])]""")
+        return lines, board
+
+    EXPECTED_LINES = {
+        "localhost": ["1 of 3 expected add-ons checked · Image Update Monitor: not installed · Update Gaps: not supported",
+                      [["sb-chip", "Role build"]]],
+        "web-host": ["2 of 2 expected add-ons checked", [[LABEL["info"], "No target profile"]]],
+    }
+    EXPECTED_BOARD = [False, "3 of 5 expected add-ons checked", [[LABEL["warning"], "1 not installed"], [LABEL["warning"], "1 not supported"],
+                                                                 [LABEL["info"], "1 host without a target profile"]]]
+    page = open_page(browser, "scenario=expected&lang=en")
+    keys = page.evaluate("() => Array.from(document.querySelectorAll('.sb-tile')).map(t => t.dataset.key)")
+    check(rows(page) == ["localhost", "web-host"] and keys == [
+        "localhost/cronjobs", "localhost/host-settings", "localhost/image-updates", "localhost/update-gaps",
+        "web-host/cronjobs", "web-host/host-settings", "web-host/image-updates"],
+          "the expected Update Gaps has a tile, on its own host only: " + repr(keys))
+    check(tile_label(page, "localhost/update-gaps") == [LABEL["warning"], "No status", True]
+          and "reports no status" in tile_text(page, "localhost/update-gaps") and "Update Gaps" in tile_text(page, "localhost/update-gaps"),
+          "expected and installed without the status entry: a warning, named by its manifest: " + tile_text(page, "localhost/update-gaps"))
+    check(tile_label(page, "localhost/image-updates") == [LABEL["warning"], "Missing", True], "expected and not installed: missing, a warning")
+    check(tile_label(page, "localhost/cronjobs") == [LABEL["none"], "Not installed", True], "not expected and not installed: neutral")
+    check(host_label(page, "localhost") == [LABEL["warning"] + " az-label--strong", "Warning"], "the gaps make the row a warning")
+    check(expected_coverage(page) == (EXPECTED_LINES, EXPECTED_BOARD),
+          "1 of 3 expected add-ons checked on board-host, both gaps named: " + repr(expected_coverage(page)))
+    # only what needs attention keeps both gaps and every coverage line
+    page.click(".az-switch")
+    page.wait_for_timeout(50)
+    keys = page.evaluate("() => Array.from(document.querySelectorAll('.sb-tile')).map(t => t.dataset.key)")
+    check(page.is_checked("#only-notable") and keys == ["localhost/image-updates", "localhost/update-gaps", "web-host/image-updates"],
+          "the switch keeps the expected add-ons that are missing or report no status: " + repr(keys))
+    check(expected_coverage(page) == (EXPECTED_LINES, EXPECTED_BOARD),
+          "the coverage of the board and of each host stays with the switch: " + repr(expected_coverage(page)))
+    shot(page, "expected-hosts")
+    no_problems(page, "expected")
+    page.context.close()
+
+    page = open_page(browser, "scenario=expected&lang=en", tab=None)
+    got = tasks(page)
+    check([(x["key"], x["group"], x["label"][1], x["title"]) for x in got] == [
+        ("localhost/image-updates/coverage", "warning", "Warning", "Image Update Monitor is missing"),
+        ("localhost/update-gaps/coverage", "warning", "Warning", "Update Gaps: not supported"),
+        ("web-host/profile", "info", "Notice", "No target profile"),
+        ("web-host/image-updates/item:updates", "info", "Notice", "Updates available: 3")],
+          "both gaps of board-host are tasks: " + repr([(x["key"], x["label"][1], x["title"]) for x in got]))
+    gap = next((x for x in got if x["key"] == "localhost/update-gaps/coverage"), {})
+    check({k: gap.get(k) for k in ("where", "chips", "detail", "facts", "button")} == {
+        "where": "board-host · Update Gaps", "chips": ["expected for role build"], "detail": "This version of the add-on reports no status.",
+        "facts": [["Resolved when", "the add-on answers in time, with every check complete"]], "button": "Open in Update Gaps"},
+          "the task of an add-on that reports no status: " + repr(gap))
+    task_button(page, "localhost/update-gaps/coverage").click()
+    check(mock(page, "jumps") == [["/update-gaps", None]], "it opens Update Gaps on its host: " + json.dumps(mock(page, "jumps")))
+    shot(page, "expected-tasks")
+    no_problems(page, "expected, tasks")
+    page.context.close()
+
     # ---------- package names like "constructor", and status output at and past 64 KiB ----------
     def edge_round(page, what):
         keys = page.evaluate("() => Array.from(document.querySelectorAll('.sb-tile')).map(t => t.dataset.key)")

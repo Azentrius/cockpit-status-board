@@ -6,7 +6,7 @@
  * test/serve.py): the manifests, and the output of each add-on's status verb, the German one
  * when there is a .de.json and the page asks with --lang de.
  *
- * Query parameters: scenario=default|real|tasks|edge|hostile|broken|empty, chunk (characters per streamed chunk), badhosts=1 (the invalid names of the
+ * Query parameters: scenario=default|real|tasks|expected|edge|hostile|broken|empty, chunk (characters per streamed chunk), badhosts=1 (the invalid names of the
  * machines fixture stay in the list), delay (ms per answer). Tests change window.__mock at run
  * time and read what the page did from it: calls, jumps, watches, unexpected, locations (every
  * cockpit.location.go()). The page's location is its hash (#/hosts), as in Cockpit. */
@@ -145,6 +145,27 @@
                 },
             };
         },
+        /* Every add-on a host's profile expects, installed or not: Host Settings on this host
+           ("board-host", role build) expects itself, Update Gaps and Image Update Monitor. Update
+           Gaps is installed in a version without the status entry, and no host reports it with
+           one; Image Update Monitor is not installed here; Cron Jobs, only on web-host, is not
+           expected here. web-host sends no profile. */
+        expected: () => ({
+            machines: { "web-host": { visible: true } },
+            hosts: {
+                localhost: host("board-host", Object.assign(cockpitPackages(), {
+                    "host-settings": pkg("host-settings", { doc: Object.assign(JSON.parse(fixture("status/ext-good-host-settings.json")), {
+                        profile: { roles: ["build"], expect: ["host-settings", "update-gaps", "image-updates"], skip: [], set_at: "2026-10-19T09:00:00Z" },
+                    }) }),
+                    "update-gaps": pkg("update-gaps-old", null),
+                })),
+                "web-host": host("web-host", {
+                    system: pkg("system", null),
+                    cronjobs: pkg("cronjobs", "good-cronjobs-ok"),
+                    "image-updates": pkg("image-updates", "good-image-updates"),
+                }),
+            },
+        }),
         /* Package names that are also names of what every object inherits ("constructor"), and
            status output at and past the limit of 64 KiB, streamed in chunks; one host that is fine. */
         edge: () => ({

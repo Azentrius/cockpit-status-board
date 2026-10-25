@@ -1254,11 +1254,107 @@ t("profile: an expected add-on that no host reports gets a tile in that row only
         ["security", "security", "missing", "absent", "missing", false]], "named by the package; a name every object has is a plain name");
     assert.deepStrictEqual(row(rows, "b").tiles.map(x => [x.pkg, x.kind]), [["cronjobs", "status"], ["host-settings", "missing"]], "not on other hosts");
     assert.ok(({}).constructor === Object && Object.prototype.polluted === undefined);
-    /* an expected package installed without a status entry (the board itself): nothing to judge */
+    /* an expected package installed without a status entry that no host reports with one is a gap
+       as well, even the board itself (the role bastion does not expect it; an extra expect in
+       Host Settings would) */
     const self = SB.buildBoard([okHost("a", true, [HS, ["status-board", "system"]],
         { "host-settings": hsWith({ roles: ["bastion"], expect: ["host-settings", "status-board"], skip: [] }) })], NOW);
-    assert.deepStrictEqual(self[0].tiles.map(x => x.pkg), ["host-settings"]);
-    assert.deepStrictEqual(self[0].coverage, { total: 1, checked: 1, gaps: [] });
+    assert.deepStrictEqual(self[0].tiles.map(brief), [
+        ["host-settings", "status", "ok", "ok", "checked", true, null],
+        ["status-board", "nostatus", "warning", "nostatus", "unsupported", true, "warning"]]);
+    assert.deepStrictEqual([self[0].coverage.total, self[0].coverage.checked], [2, 1]);
+});
+
+/* ---------- every add-on a host's profile expects, installed or not ---------- */
+
+/* Host Settings' answer with a profile of the role build that expects these add-ons. */
+const expecting = (...addons) => hsWith({ roles: ["build"], expect: addons, skip: [] });
+/* The manifest of an add-on in a version without the status entry: only its menu label. */
+const oldManifest = label => ({ menu: { index: { label } } });
+/* A host that could be read, its packages from manifests given as objects ({ pkg: manifest }),
+   those that could not be read ({ pkg: message }) and the results of its status calls. */
+const hostOf = (key, own, mans, results, unreadable) => ({ key, own, label: key, connection: own ? null : key,
+    result: { reach: "ok", discovery: "ok", packages: SB.packagesOf(mans, unreadable), results } });
+const HS_MANIFEST = () => json("manifests/host-settings.json");
+
+t("expected: installed without a status entry, reported by no host, is a gap with a task", () => {
+    /* Host Settings and the Security Monitor expected, only Host Settings can be checked */
+    const rows = SB.buildBoard([hostOf("one-host", true, { "host-settings": HS_MANIFEST(), security: oldManifest("Security Monitor") },
+        { "host-settings": expecting("host-settings", "security") })], NOW);
+    assert.deepStrictEqual(rows[0].tiles.map(brief), [
+        ["host-settings", "status", "ok", "ok", "checked", true, null],
+        ["security", "nostatus", "warning", "nostatus", "unsupported", true, "warning"]]);
+    assert.deepStrictEqual(rows[0].tiles.map(x => [x.label, x.sortLabel, x.jump]),
+        [["Host Settings", "Host Settings", true], ["Security Monitor", "Security Monitor", true]], "named by its own manifest; it opens the add-on");
+    assert.deepStrictEqual(rows[0].coverage, { total: 2, checked: 1, gaps: [{ pkg: "security", label: "Security Monitor", coverage: "unsupported" }] },
+        "1 of 2 checked");
+    assert.deepStrictEqual(SB.coverageSummary(rows),
+        { total: 2, checked: 1, gaps: { unchecked: 0, stale: 0, noaccess: 0, unreadable: 0, unsupported: 1 }, unread: 0, unreadState: "none" });
+    assert.deepStrictEqual([rows[0].state, rows[0].noProfile, SB.notable(rows[0].tiles[1])], ["warning", false, true]);
+    assert.deepStrictEqual(tasksOf(rows).tasks.map(x => [x.key, x.kind, x.state, x.coverage, x.check, x.expected, x.roles, x.tile.jump]),
+        [["one-host/security/coverage", "coverage", "warning", "unsupported", null, true, ["build"], true]]);
+});
+
+t("expected: not installed is missing; optional and not installed is no alarm", () => {
+    const rows = SB.buildBoard([
+        hostOf("one-host", true, { "host-settings": HS_MANIFEST() }, { "host-settings": expecting("host-settings", "security") }),
+        okHost("two-host", false, [["cronjobs", "cronjobs"]], { cronjobs: status("good-cronjobs-ok.json") }),
+    ], NOW);
+    assert.deepStrictEqual(row(rows, "one-host").tiles.map(brief), [
+        ["cronjobs", "missing", "none", "missing", null, false, null],
+        ["host-settings", "status", "ok", "ok", "checked", true, null],
+        ["security", "missing", "warning", "absent", "missing", true, "warning"]]);
+    assert.deepStrictEqual(row(rows, "one-host").tiles.map(SB.notable), [false, false, true], "only the expected one needs attention");
+    assert.deepStrictEqual(row(rows, "one-host").coverage, { total: 2, checked: 1, gaps: [{ pkg: "security", label: "security", coverage: "missing" }] },
+        "the optional Cron Jobs does not count");
+    assert.deepStrictEqual(tasksOf(rows).tasks.filter(x => x.host.key === "one-host").map(x => [x.key, x.state, x.coverage, x.tile.jump]),
+        [["one-host/security/coverage", "warning", "missing", false]], "a task for the missing one, none for the optional one");
+});
+
+t("expected: a newer version with the status entry on another host gives no second tile", () => {
+    const old = (key, own, profile) => hostOf(key, own, Object.assign({ security: oldManifest("Security Monitor") }, profile ? { "host-settings": HS_MANIFEST() } : {}),
+        profile ? { "host-settings": expecting("host-settings", "security") } : {});
+    const newer = okHost("two-host", false, [["security", "security"]], { security: status("ext-good-security.json") });
+    const rows = SB.buildBoard([old("one-host", true, true), newer], NOW);
+    assert.deepStrictEqual(row(rows, "one-host").tiles.map(x => x.pkg), ["host-settings", "security"], "one tile of the Security Monitor");
+    assert.deepStrictEqual(brief(tileOn(rows, "one-host", "security")), ["security", "nostatus", "warning", "nostatus", "unsupported", true, "warning"]);
+    assert.deepStrictEqual(brief(tileOn(rows, "two-host", "security")), ["security", "status", "danger", "danger", "partial", true, "warning"]);
+    assert.deepStrictEqual(tasksOf(rows).tasks.filter(x => x.kind === "coverage").map(x => [x.key, x.coverage]),
+        [["one-host/security/coverage", "unsupported"], ["two-host/security/coverage", "partial"]], "the gap stays on its host");
+    /* without the newer host: every host whose profile expects it has its own gap, a host without
+       a profile shows nothing for it */
+    const alone = SB.buildBoard([old("one-host", true, true), old("three-host", false, true), old("four-host", false, false)], NOW);
+    assert.deepStrictEqual(alone.map(r => [r.host.key, r.tiles.filter(x => x.pkg === "security").map(x => [x.kind, x.state, x.coverage])]), [
+        ["one-host", [["nostatus", "warning", "unsupported"]]], ["three-host", [["nostatus", "warning", "unsupported"]]], ["four-host", []]]);
+    assert.deepStrictEqual(tasksOf(alone).tasks.filter(x => x.kind === "coverage").map(x => x.key),
+        ["one-host/security/coverage", "three-host/security/coverage"]);
+});
+
+t("expected: a manifest whose status cannot be read is a visible gap", () => {
+    const one = (mans, results, unreadable) => SB.buildBoard([hostOf("one-host", true, Object.assign({ "host-settings": HS_MANIFEST() }, mans),
+        Object.assign({ "host-settings": expecting("host-settings", "security") }, results), unreadable)], NOW)[0];
+    const cases = {
+        /* the manifest cannot be read, and no host reports the add-on */
+        manifest: one({}, {}, { security: "Permission denied" }),
+        /* a status command the board refuses to run */
+        refused: one({ security: { menu: { index: { label: "Security Monitor" } }, azentrius: { status: ["/bin/sh", "status"] } } }, {}),
+        /* an answer that is no JSON */
+        answer: one({ security: json("manifests/security.json") }, { security: { kind: "invalid", reason: "not-json", detail: null } }),
+    };
+    assert.deepStrictEqual(Object.keys(cases).map(k => brief(cases[k].tiles.find(x => x.pkg === "security"))), [
+        ["security", "error", "warning", "unreadable", "unreadable", true, "warning"],
+        ["security", "rejected", "warning", "rejected", "unreadable", true, "warning"],
+        ["security", "error", "warning", "unreadable", "unreadable", true, "warning"]]);
+    assert.strictEqual(cases.manifest.tiles.find(x => x.pkg === "security").error.kind, "manifest");
+    Object.keys(cases).forEach(k => {
+        assert.deepStrictEqual([cases[k].coverage.total, cases[k].coverage.checked, cases[k].coverage.gaps.map(g => g.coverage)], [2, 1, ["unreadable"]], k);
+        assert.ok(cases[k].tiles.filter(x => x.pkg === "security").every(SB.notable), k);
+    });
+    assert.deepStrictEqual(tasksOf([cases.manifest]).tasks.map(x => [x.key, x.state, x.coverage]), [["one-host/security/coverage", "warning", "unreadable"]]);
+    /* not expected, an unreadable manifest that no host reports stays without a tile, as before */
+    const optional = SB.buildBoard([hostOf("one-host", true, { "host-settings": HS_MANIFEST() }, { "host-settings": expecting("host-settings") },
+        { security: "Permission denied" })], NOW)[0];
+    assert.deepStrictEqual(optional.tiles.map(x => x.pkg), ["host-settings"]);
 });
 
 t("profile: expected in a version without the status entry is a gap; not expected it is not", () => {

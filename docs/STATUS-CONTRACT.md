@@ -251,9 +251,11 @@ and checks they expect, and checks left out on purpose. It names only its own ho
   folders, as in `addon`.
 - A skip names a check as `addon/check`; one that names an add-on alone leaves out nothing. It
   holds until the day of its `until`, read at the board's clock, or for good without one.
-- The board counts an expected add-on that is not installed as missing (a warning), and rates the
-  gaps of an add-on the profile does not expect lower. Without a profile every installed add-on
-  with a status entry counts as expected, and the host is marked as having none.
+- The board counts an expected add-on that is not installed as missing (a warning), and one
+  installed in a version without the status entry as not supported (a warning), also where no
+  host reports it with a status entry; it rates the gaps of an add-on the profile does not expect
+  lower. Without a profile every installed add-on with a status entry counts as expected, and the
+  host is marked as having none.
 
 ## Optional: a state in Cockpit's menu
 

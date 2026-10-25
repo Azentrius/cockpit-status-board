@@ -526,7 +526,8 @@
     /* Whether a tile needs attention: a notice, a warning or a problem (out of date included), or
        a host still loading. OK, Unknown, Not installed and No status do not. No access and an
        answer that rates nothing are warnings (gaps in what the board knows), so they do, unless
-       the host's profile does not expect the add-on; so does an expected add-on that is missing. */
+       the host's profile does not expect the add-on; so does an expected add-on that is missing or
+       reports no status. */
     const notable = tile => tile.kind === "loading" || rank(tile.state) >= RANK.info;
 
     /* ---------- a host's target profile ---------- */
@@ -698,9 +699,11 @@
        without the status entry.
        Profile: a host's own Host Settings may send its target profile (profile, else null); it
        decides for that host's row only. With it the expected add-ons are those of
-       expectationOf(); a check it leaves out (skips) is "notapplicable" in that row, with the
-       profile's reason (byProfile, until; tile.status is then a copy with those checks); an
-       expected add-on no host reports gets a "missing" tile in that row only, named by its
+       expectationOf(), and every one of them has a tile in that row, installed or not; a check it
+       leaves out (skips) is "notapplicable" in that row, with the profile's reason (byProfile,
+       until; tile.status is then a copy with those checks); an expected add-on no host reports
+       with a status entry gets its tile in that row only ("missing", "nostatus", or Status
+       unreadable for a manifest that cannot be read), named by this host's manifest, else by its
        package. Without a profile every installed add-on with a status entry is expected and none
        other; noProfile is true for a host that could be read while the board has tiles.
        Expected and missing, or installed in a version without the status entry, the tile is a
@@ -750,12 +753,14 @@
                 profile = profileOn(r);
                 expect = expectationOf(profile, now);
                 const pkgs = Array.from(labels.keys());
-                /* an add-on the profile expects that no host reports: a tile in this row only (one
-                   installed here without a status entry has nothing to judge) */
-                if (expect) expect.addons.forEach(pkg => { if (!labels.has(pkg) && !pkgOf(r, pkg)) pkgs.push(pkg); });
+                /* every add-on the profile expects, installed here or not: one that no host reports
+                   with a status entry gets a tile in this row only (Missing where it is not
+                   installed, No status where it is, in a version without the status entry, Status
+                   unreadable where its manifest cannot be read), named by this host or its package */
+                if (expect) expect.addons.forEach(pkg => { if (!labels.has(pkg)) pkgs.push(pkg); });
                 tiles = pkgs.map(pkg => {
                     const p = pkgOf(r, pkg);
-                    const sortLabel = labels.get(pkg) || pkg;
+                    const sortLabel = labels.get(pkg) || nameOn(r, pkg) || pkg;
                     const label = nameOn(r, pkg) || sortLabel;
                     if (!p) return { pkg, label, sortLabel, kind: "missing", state: "none", word: "missing", jump: false };
                     if (!p.entry) return { pkg, label, sortLabel, kind: "nostatus", state: "none", word: "nostatus", jump: true };

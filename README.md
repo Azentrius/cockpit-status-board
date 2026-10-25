@@ -73,7 +73,8 @@ of the address (`#/tasks`, `#/hosts`), so Back, a reload and a bookmark keep it.
   with a reason and maybe an end date. The host's line shows its roles ("Role web"). An expected
   add-on that is not installed there is a warning, "Update Gaps is missing" (the board cannot know
   its package name, so it only says that the profile expects it); one installed in a version
-  without a status is a gap as well. A check the profile leaves out is not applicable until its end
+  without a status is a gap as well, also where no other host has a version with one. A check the
+  profile leaves out is not applicable until its end
   date and counts nowhere. An add-on the profile does not expect counts in no figure, and its gaps
   are softer: out of date, partly checked or failed are a notice, no access, not set up or not
   supported are not rated, a status the board cannot read stays a warning. A host's profile
@@ -88,7 +89,8 @@ of the address (`#/tasks`, `#/hosts`), so Back, a reload and a bookmark keep it.
 - **Only what needs attention:** on the tab Hosts and coverage, a switch in the header leaves out
   the tiles in OK, Unknown, Not installed and No status (and the unrated ones of add-ons a host is
   not expected to have); a host left without tiles says "Nothing that needs attention". The
-  coverage stays, and so do expected add-ons that are missing. The browser keeps the choice.
+  coverage stays, and so do expected add-ons that are missing or report no status. The browser
+  keeps the choice.
 - **Versions:** each tile names the add-on's version and says so when another host runs a newer
   one ("Version 0.2.0 runs on other hosts"), so a forgotten update shows.
 - **Current without you:** it loads on opening, on Refresh and every 5 minutes while the page is
@@ -126,7 +128,8 @@ of add-ons; [docs/INTERNALS.md](docs/INTERNALS.md) has the details and every cal
 - On the other hosts: `cockpit-bridge`, a login by SSH key (the key unlocked in the agent, as
   `pam_ssh_add` does it at login, and the host key known), and the add-ons in a version with the
   status contract: Cron Jobs 2.8.1, Image Update Monitor 0.20.0, Update Gaps 0.1.0, Security
-  Monitor 0.1.0 or newer. An older version shows as "No status" where another host has a newer one.
+  Monitor 0.1.0 or newer. An older version shows as "No status" where another host has a newer one
+  or the host's target profile expects the add-on.
 - Without administrative access on a host, each add-on reports what it can read without root (its
   `status.json`); that is the normal case for hosts reached with a key.
 

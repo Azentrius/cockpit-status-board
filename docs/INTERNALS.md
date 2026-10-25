@@ -187,7 +187,8 @@ How a valid answer becomes a tile (its state, out of date, the key figure) is pa
 
 An add-on the host's target profile does not expect keeps these labels, except that No access and
 Not checked are not rated there (`none`): they are no gap of what the host should have. An expected
-add-on that no host reports gets a Missing tile in that host's row only, named by its package.
+add-on that no host reports with a status entry gets its tile (Missing, No status, Status
+unreadable) in that host's row only, named by that host's manifest, else by its package.
 
 The tiles of a row are sorted by name, the same on every host, so the columns line up. A tile is
 named by the label its own host sends (else its manifest's menu label); the name used for sorting
@@ -220,8 +221,9 @@ board loads again (`state.open`, by `data-key`; not kept across page loads).
 **Only what needs attention** (`notable()` in `lib/status.js`, on the tab Hosts and coverage): the
 switch leaves out tiles whose state is below Notice (OK, Unknown, Not installed, No status, and the
 unrated tiles of add-ons a host is not expected to have), and keeps tiles that are still loading
-and expected add-ons that are missing. A row's label still says the whole row; a row left without tiles says "Nothing that needs
-attention". The browser keeps the switch in `localStorage`; without storage it starts off. Up to
+and expected add-ons that are missing or report no status. A row's label still says the whole row;
+a row left without tiles says "Nothing that needs attention". The coverage lines stay. The browser
+keeps the switch in `localStorage`; without storage it starts off. Up to
 0.2.3 No access was left out too, and an answer that rated nothing showed as Unknown: with the
 switch on, an add-on the board knew nothing about disappeared.
 
@@ -237,9 +239,12 @@ add-on's answer, changes nothing there.
   makes that check `notapplicable` in that row, with the skip's reason (`byProfile`, `until` on the
   check; the tile's `status` is then a copy, the add-on's answer stays as it is). On the day of its
   `until` the check counts again. A check the add-on itself reports as `notapplicable` keeps its
-  own reason; a skip that names an add-on alone leaves out nothing. An expected add-on that no
-  host reports gets a Missing tile in that row only; one installed there without a status entry
-  while no host reports one (the board itself, for the role `bastion`) is not judged.
+  own reason; a skip that names an add-on alone leaves out nothing. Every expected add-on has a
+  tile in that row, installed or not. One that no host reports with a status entry gets it in that
+  row only: Missing where it is not installed, No status where it is installed in a version
+  without the status entry, Status unreadable where its manifest cannot be read. So an expected
+  add-on never drops out of the host's coverage because no host reports it. The role `bastion`
+  does not expect the board itself, which has no status entry.
 - **Without a profile** every installed add-on with a status entry is expected, and none other:
   as the board counted before it read profiles. The row's `noProfile` is true for a host that
   could be read while the board has tiles; its line and one Notice task say "No target profile"
