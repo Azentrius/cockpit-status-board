@@ -257,8 +257,10 @@ with sync_playwright() as p:
     # without a location the board opens on Needs attention: what to do on every host, in one order
     check(b.evaluate("document.querySelector('#tab-tasks').getAttribute('aria-selected')") == "true", "the board opens on Needs attention")
     keys = b.evaluate("() => Array.from(document.querySelectorAll('.sb-task')).map(t => t.dataset.task)")
-    check(keys == ["e2e-closed/unreachable", "e2e-locked/locked", "localhost/e2e/item:probe", "e2e-peer/e2e/item:probe"],
-          "the tasks of the hosts: the closed port, the locked key, then the add-on's notice here and on e2e-peer: " + repr(keys))
+    check(keys == ["e2e-closed/unreachable", "e2e-locked/locked", "localhost/profile", "localhost/e2e/item:probe", "e2e-peer/profile",
+                   "e2e-peer/e2e/item:probe"],
+          "the tasks of the hosts: the closed port, the locked key, then here and on e2e-peer the notice that the host has no target "
+          "profile (no Host Settings) and the add-on's notice: " + repr(keys))
     shot(page, "e2e-tasks")
     # the tab is part of the location, which the shell keeps in its address
     b.click("#tab-hosts")
