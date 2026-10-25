@@ -872,7 +872,8 @@
        add-on: the finding's, else its item's; the item's; the gap check's, else the link of its
        item; null: the tile's own) and evidence ({ at, complete }: the time of the owning check,
        else the item's, else the answer's; complete true or false when a check owns the item, null
-       without one). An item's state is its own: out of date is a gap of the coverage, not a task
+       without one; for a finding, and for an item with findings, never true unless its list is
+       complete). An item's state is its own: out of date is a gap of the coverage, not a task
        per item. Nothing here is a text of the page; nothing of a host is used as a key of an
        object. */
     function buildTasks(rows, now) {
@@ -927,9 +928,14 @@
                     });
                 }
                 if (shown || rank(item.state) < RANK.info) return;
+                /* complete only while the owning check is checked and in time; an item with
+                   findings besides only where its list is complete, as its findings' tasks say
+                   ("complete": true, "total": 1, "list": [] is no evidence that nothing is left) */
+                const inTime = check !== null && checkCoverage(check, now).coverage === "checked";
+                const complete = item.findings ? item.findings.complete && inTime : check ? inTime : null;
                 add({ kind: "item", key: host.key + "/" + tile.pkg + "/item:" + item.id, state: item.state, title: item.title, item, summaryOnly,
                       link: item.link || "",
-                      evidence: at !== null ? { at, complete: check ? checkCoverage(check, now).coverage === "checked" : null } : null });
+                      evidence: at !== null ? { at, complete } : null });
             });
         }
         rows.forEach((row, hostIndex) => {

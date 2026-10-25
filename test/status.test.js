@@ -1145,6 +1145,32 @@ t("buildTasks: the evidence of a finding says complete only for a complete list"
     assert.deepStrictEqual(tasksFor("ext-complete-total-0-checked.json"), [], "counts none, lists none: nothing to do");
 });
 
+t("buildTasks: the evidence of an item with findings says complete only for a complete list", () => {
+    /* the item's task of an answer of the Security Monitor (ext-complete-total-1-empty.json, changed) at the time now */
+    const itemTask = (change, now) => {
+        const doc = rawDoc("ext-complete-total-1-empty.json");
+        if (change) change(doc, doc.items[0]);
+        const answer = { kind: "ok", status: SB.validateStatus(JSON.stringify(doc), "security").status };
+        const at = now === undefined ? NOW : now;
+        const tasks = tasksOf(SB.buildBoard([okHost("h", true, [["security", "security"]], { security: answer })], at), at).tasks.filter(x => x.kind === "item");
+        return tasks.map(x => [x.key, x.state, x.evidence]);
+    };
+    const checked = Date.UTC(2026, 9, 19, 18, 55);
+    /* counts one and lists none, although its check is checked and in time: not complete */
+    assert.deepStrictEqual(itemTask(), [["h/security/item:exposure", "danger", { at: checked, complete: false }]]);
+    /* the same answer counting none: its list is complete, so is the evidence of its item */
+    assert.deepStrictEqual(itemTask((doc, item) => { item.findings.total = 0; }), [["h/security/item:exposure", "danger", { at: checked, complete: true }]]);
+    /* an hour later its check is out of date: not complete either */
+    assert.deepStrictEqual(itemTask((doc, item) => { item.findings.total = 0; }, NOW + 3600e3).map(x => x[2].complete), [false]);
+    /* a list that is not complete by its own word, and one without a check that owns the item */
+    assert.deepStrictEqual(itemTask((doc, item) => { item.findings.total = 0; item.findings.complete = false; }).map(x => x[2].complete), [false]);
+    assert.deepStrictEqual(itemTask((doc, item) => { item.findings.total = 0; doc.checks[0].item = "elsewhere"; }).map(x => x[2].complete), [false],
+        "with findings but no owning check: never complete, as its findings would say");
+    /* without findings the owning check decides, as before; without that check nothing is said */
+    assert.deepStrictEqual(itemTask((doc, item) => { delete item.findings; }).map(x => x[2].complete), [true]);
+    assert.deepStrictEqual(itemTask((doc, item) => { delete item.findings; doc.checks[0].item = "elsewhere"; }).map(x => x[2].complete), [null]);
+});
+
 /* ---------- a host's target profile ---------- */
 
 /* Host Settings' answer (ext-good-host-settings.json) with another profile; without one it sends none. */
