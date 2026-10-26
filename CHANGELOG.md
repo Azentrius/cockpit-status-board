@@ -59,9 +59,10 @@ add-ons' checks and its target profile, and the areas the suite does not cover y
 - **README:** pictures of both tabs with neutral host names, a walk from the install through the
   target profile, messages and watchdog to a task, the add-on and the check again, and the suite
   at a glance: where each add-on is checked in CI and where its package only installs.
-- **Tested together:** Status Board 0.3.0, Host Settings 0.2.0 and Security Monitor 0.4.0. Target
-  profiles need Host Settings 0.2.0 or newer, single findings and checks of exposed ports
-  Security Monitor 0.4.0 or newer.
+- **Tested together:** Status Board 0.3.0, Host Settings 0.2.0 and Security Monitor 0.4.0, with
+  their real packages in the end-to-end test of the suite (workflow `e2e-suite` of Host
+  Settings). Target profiles need Host Settings 0.2.0 or newer, single findings and checks of
+  exposed ports Security Monitor 0.4.0 or newer.
 - **Older add-ons:** the contract stays at schema 1 and the new parts are optional. Add-ons in
   older versions still work as before; their items show as "summary only" in Needs attention.
 
