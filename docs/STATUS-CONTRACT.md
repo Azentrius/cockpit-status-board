@@ -148,7 +148,9 @@ name is not read. What breaks the rules below is left out and counted, it never 
 unreadable. The board checks them (`validateStatus()`, `test/fixtures/status/ext-*.json`), lets
 open findings count for an item's state (below), takes an add-on's coverage from its checks, lists
 open findings as tasks ([INTERNALS.md](INTERNALS.md), "Needs attention") and takes from a host's
-profile what that host is expected to have ([INTERNALS.md](INTERNALS.md), "Expectation").
+profile what that host is expected to have ([INTERNALS.md](INTERNALS.md), "Expectation"). Of the
+add-ons, the Security Monitor sends checks and findings and Host Settings a host's profile; Cron
+Jobs, Image Update Monitor and Update Gaps send none of the optional parts yet.
 
 ```json
 {
@@ -184,8 +186,8 @@ profile what that host is expected to have ([INTERNALS.md](INTERNALS.md), "Expec
 | `checks[].checked_at`, `stale_after`, `link` | as for items | left out |
 | `checks[].reason` | text, cut to 200: why it is not `checked` | left out |
 | `items[].findings` | an object `{complete, total, list}` | left out and counted |
-| `findings.complete` | `true` only when `list` holds every finding of the item | (required) |
-| `findings.total` | how many there are, listed or not | the length of `list` |
+| `findings.complete` | `true` only when `list` holds every finding of the item (see "A list is complete" below) | (required) |
+| `findings.total` | how many there are, listed or not: a whole number from the length of `list` to 1,000,000 | the length of `list` |
 | `findings.list` | at most 100 findings per answer, over all items; more are left out | left out and counted |
 | `list[].fid` | `^[a-z0-9][a-z0-9._:-]{0,63}$`, once per answer | the finding is left out |
 | `list[].state` | one of the five states | the finding is left out |
@@ -212,10 +214,24 @@ instead: `h-` and 16 hex digits of an HMAC-SHA256 with a random key the add-on k
 the host. Like every other text of the answer, titles name no IP addresses, user names, URLs or
 paths.
 
-- **A list is complete** only when the add-on says so and a check of state `checked` names the
-  item in `item`; a list with findings left out, or one without such a check, counts as not
-  complete. Only a complete list says that a finding missing from it is gone; anything else
-  (a check that failed, ran in part, is out of date, an answer cut short) says nothing about it.
+- **A list is complete** only when all of this holds:
+  - the add-on says so (`"complete": true`);
+  - a check of state `checked` names the item in `item`;
+  - every entry of `list` was taken over: none broke the rules, came twice or went past the limit
+    of 100 findings per answer;
+  - `total`, where it is a whole number, is not greater than the number of findings taken over.
+    `{"complete": true, "total": 1, "list": []}` and `{"complete": true, "total": 2, "list": [A]}`
+    are not complete; neither is a list whose `total` lies past 1,000,000 (that total is not
+    kept). A `total` that is no whole number is left out as the table says: the length of
+    `list`, and the list counts as the rules above decide. An answer without `total` counts the
+    same way.
+
+  Only a complete list says that a finding missing from it is gone; anything else (a check that
+  failed, ran in part, is out of date, an answer cut short, a total the list does not reach) says
+  nothing about it. Host Settings' notifier reads the same answers and judges them alike: the
+  answers `test/fixtures/status/ext-complete-*.json` are shared with it byte for byte, one per
+  case (counts one and lists none, counts two and lists one, counts none with its check
+  `checked`, no `total`, an entry that breaks the rules, a `fid` twice, more than 100 findings).
 - **An item is never better than its open findings:** the board takes the most severe state of the
   item and of its findings that are not accepted, or whose `accepted_until` has passed. An add-on
   may keep accepted findings out of the item's state (Update Gaps does), but it keeps them in the
@@ -237,9 +253,34 @@ and checks they expect, and checks left out on purpose. It names only its own ho
   folders, as in `addon`.
 - A skip names a check as `addon/check`; one that names an add-on alone leaves out nothing. It
   holds until the day of its `until`, read at the board's clock, or for good without one.
-- The board counts an expected add-on that is not installed as missing (a warning), and rates the
-  gaps of an add-on the profile does not expect lower. Without a profile every installed add-on
-  with a status entry counts as expected, and the host is marked as having none.
+- The board counts an expected add-on that is not installed as missing (a warning), and one
+  installed in a version without the status entry as not supported (a warning), also where no
+  host reports it with a status entry; it rates the gaps of an add-on the profile does not expect
+  lower. Without a profile every installed add-on with a status entry counts as expected, and the
+  host is marked as having none.
+
+**From one answer to the next.** The board and Host Settings' notifier read the same answers and
+keep to the same rules when an answer changes from one run to the next, so that nothing looks
+better than the data shows:
+
+- **Expected add-ons always count.** An add-on a host's profile expects counts in that host's
+  coverage whatever it answers: not installed (missing), installed in a version without the status
+  entry (not supported), or with a status that cannot be read, also where no other host reports
+  that add-on. It never drops out of the count because no host knows it.
+- **Complete means complete, `total` included.** A list counts as complete only as "A list is
+  complete" above says; one that counts more findings than it holds says nothing about those it
+  does not hold, and a finding known before stays as it was.
+- **Broken data resolves nothing.** When an answer drops `findings` for an item, sends `findings`
+  that break the rules or a list that is not complete, or comes from a version of the add-on
+  without the optional parts, a reader that knew single findings of that item keeps them as they
+  were; only a later complete list without a finding says that the finding is gone. A broken part
+  of one item does not hold back the findings of another item that arrived intact. An add-on that
+  never sent findings is judged by its items, as before. The board keeps no state between loads,
+  so this rule is the notifier's: Host Settings keeps its known findings this way.
+- **Reading `accepted_until` is not sending it.** That a reader supports acceptances does not make
+  an add-on send findings or acceptances. An add-on without the optional parts is judged by its
+  items alone, and the board marks its items "summary only"; an acknowledgement it keeps for
+  itself (as Update Gaps does) shows only in the state it gives its items.
 
 ## Optional: a state in Cockpit's menu
 

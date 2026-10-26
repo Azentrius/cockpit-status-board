@@ -21,6 +21,26 @@
 .sb-host__profile { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); min-inline-size: 0; max-inline-size: 100%; }
 /* A role is a host's word of up to 40 characters: it wraps rather than widen the line. */
 .sb-host__profile .sb-chip { max-inline-size: 100%; white-space: normal; overflow-wrap: anywhere; }
+/* The chip in the board's coverage that names the areas not covered yet; it wraps on a phone. */
+.sb-coverage__limits { max-inline-size: 100%; white-space: normal; overflow-wrap: anywhere; }
+
+/* ---------- what the suite does not cover yet: a fold below each host's coverage line ---------- */
+.sb-limits { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-xs); min-inline-size: 0; }
+.sb-limits__toggle { max-inline-size: 100%; padding-inline: 0; font-size: 13px; white-space: normal; text-align: start; overflow-wrap: anywhere; }
+/* Planned, not a state: a dashed outline and the subtle text colour, no label colours. */
+.sb-limits__body {
+  box-sizing: border-box;
+  inline-size: 100%;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px dashed var(--line-control);
+  border-radius: var(--radius-small);
+  font-size: 13px;
+}
+.sb-limits__note { margin: 0 0 var(--space-sm); color: var(--text-subtle); overflow-wrap: anywhere; }
+.sb-limits__list { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-sm) var(--space-md); margin: 0; }
+.sb-limits__area { font-weight: 600; overflow-wrap: anywhere; }
+.sb-limits__text { margin: 0; color: var(--text-subtle); overflow-wrap: anywhere; }
+.sb-limits__part { display: block; color: var(--text); }
 
 /* ---------- a host: a heading, then a row of tiles ---------- */
 .sb-host { display: flex; flex-direction: column; gap: var(--space-md); min-inline-size: 0; }
@@ -185,4 +205,8 @@ button.sb-tile:focus-visible { outline: 2px solid var(--focus); outline-offset: 
   .sb-task { grid-template-columns: minmax(0, 1fr); padding: var(--space-md); }
   .sb-task__act { align-items: stretch; max-inline-size: none; }
   .sb-fold__toggle { padding-inline: var(--space-md); }
+  /* each area above its text */
+  .sb-limits__list { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .sb-limits__text { margin-block-end: var(--space-sm); }
+  .sb-limits__text:last-child { margin-block-end: 0; }
 }
