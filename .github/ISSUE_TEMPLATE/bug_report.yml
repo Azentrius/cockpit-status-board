@@ -18,7 +18,7 @@ body:
       description: >-
         Shown in the page footer ("Status Board X.Y.Z"), or the output of `dpkg -s cockpit-status-board`
         or `rpm -q cockpit-status-board`.
-      placeholder: "0.2.3"
+      placeholder: "0.3.0"
     validations:
       required: true
   - type: input
