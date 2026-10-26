@@ -1,5 +1,70 @@
 # Changelog
 
+## 0.3.0 – 2026-10-26
+
+What needs attention on all hosts in a tab of its own, the coverage of every host from the
+add-ons' checks and its target profile, and the areas the suite does not cover yet.
+
+- **Needs attention:** a second tab, opened first. It lists what to do next over all hosts: open
+  findings, items that no finding explains, gaps in the coverage and hosts that cannot be read.
+  They are ordered by state, then hosts not read, then how far a finding is reachable (internet
+  first), known exploitation and age. Each task names its host and add-on, the reasons
+  ("reachable from the internet", "fix available", "summary only"), what the add-on says, since
+  when, the evidence ("Checked 20:50, complete") and what resolves it, and its button opens the
+  add-on on its host at the finding's link. "new" marks a finding first seen less than 24 hours
+  ago. Accepted findings and checks that do not apply are folded below. The tab is part of the
+  page's address (`#/tasks`, `#/hosts`), so Back, a reload and a jump from an add-on select it.
+- **Coverage:** above both tabs, "6 of 9 expected add-ons checked" with each kind of gap counted
+  and the hosts that could not be read; below each host's name the same for that host
+  ("Cron Jobs: no access · Image Update Monitor: out of date"). Where an add-on sends checks, the
+  worst check that applies decides ("Security Monitor: Container hardening partly checked");
+  otherwise the coverage comes from the tile as before.
+- **No access and nothing rated are warnings:** exit 77 is "No access" with the reason, and an
+  answer that rates nothing is "Not checked" instead of "Unknown". Both stay visible with "Only
+  what needs attention", so a reduced view no longer looks clean while checks are missing.
+- **Target profiles:** the board reads each host's target profile from Host Settings on that host
+  (only from its own answer): its roles as chips and the add-ons and checks it is expected to
+  have. An expected add-on that is not installed is "Missing", one installed without the status
+  entry "No status", both a warning and a task. Gaps of add-ons a host is not expected to have
+  are softer (a notice, or neutral). A check left out on purpose shows as not applicable, with
+  its reason, until its end date. A host without a profile gets one notice, "No target profile".
+  Without any profile the board counts as before.
+- **Areas not covered yet:** below each host's coverage, a fold names what no add-on checks yet:
+  proof of backup and restore across the suite, all known vulnerabilities, the TLS certificate
+  lifecycle, configuration drift and identity checks, each with what an installed add-on covers
+  in part today (Image Update Monitor's dumps and rollbacks, Update Gaps' CVE data for Ubuntu
+  packages, Security Monitor's SSH keys and logins). Planned scope only: never a check, a gap or a
+  task.
+- **Status contract:** optional parts for version 1, in `docs/STATUS-CONTRACT.md`: `features`
+  names what an add-on sends; `checks` says how each check went (`checked`, `partial`, `failed`,
+  `unconfigured`, `noaccess`, `unsupported`, `notapplicable`); `items[].findings` lists single
+  findings with a stable `fid`, at most 100 per answer; `profile` comes from Host Settings only.
+  An item is never better than its open findings, and an acceptance (`accepted_until`) counts for
+  at most 90 days after the check. A part that breaks the rules is left out and counted; it never
+  makes the answer unreadable.
+- **Fix, complete lists:** a list of findings counts as complete only when the add-on says so, a
+  `checked` check owns its item, every entry was taken over and its own `total` is not greater
+  than the list. `"complete": true, "total": 1, "list": []` was taken as complete, so a finding
+  missing from it could count as gone. Host Settings 0.2.0 judges the same answers the same way.
+- **Fix, expected add-ons:** every add-on a host's profile expects has a tile, also one installed
+  in a version without the status entry that no other host reports. With Host Settings and
+  Security Monitor expected and only Host Settings checkable, the host read "1 of 1 expected
+  add-ons checked" without a task; now it is "1 of 2", with a warning and a task.
+- **Fix, evidence of an item:** an item with findings says "complete" only when its list is
+  complete and its check in time, not because of its check alone.
+- **Menu:** the entry moves to the end of System, in one block with the other Azentrius add-ons.
+  Searching the menu for "azentrius" finds them all, and Cockpit's Help menu links the README.
+- **Packages:** the `.rpm` is installed and removed on Rocky Linux and AlmaLinux 9 and 10 in CI
+  (the package only; no Cockpit runs there).
+- **README:** pictures of both tabs with neutral host names, a walk from the install through the
+  target profile, messages and watchdog to a task, the add-on and the check again, and the suite
+  at a glance: where each add-on is checked in CI and where its package only installs.
+- **Tested together:** Status Board 0.3.0, Host Settings 0.2.0 and Security Monitor 0.4.0. Target
+  profiles need Host Settings 0.2.0 or newer, single findings and checks of exposed ports
+  Security Monitor 0.4.0 or newer.
+- **Older add-ons:** the contract stays at schema 1 and the new parts are optional. Add-ons in
+  older versions still work as before; their items show as "summary only" in Needs attention.
+
 ## 0.2.3 – 2026-10-23
 
 Two fixes from a review: an add-on with an unusual folder name no longer stops the board, and a

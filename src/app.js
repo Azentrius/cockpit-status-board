@@ -33,7 +33,7 @@
 (function () {
     "use strict";
 
-    const VERSION = "0.2.3";
+    const VERSION = "0.3.0";
     const SB = window.StatusBoard;
     const ICONS = window.AzIcons;
     const REFRESH_MS = 5 * 60 * 1000;
