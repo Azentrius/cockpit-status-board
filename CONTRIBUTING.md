@@ -37,7 +37,12 @@ The `test` workflow runs the lint, the offline tests, the archive and the packag
 to the same bytes, installed on Debian and Fedora) and the browser tests on every push and pull
 request. The job `e2e` runs the board in a real Cockpit with SSH to the runner itself
 (`test/e2e_cockpit.py`). Its steps install Cockpit and an SSH server, add a user and change
-`/etc/hosts`, so it runs only on CI's throwaway machine, never on one you use.
+`/etc/hosts`, so it runs only on CI's throwaway machine, never on one you use. The job `e2e-el`
+runs the same test with the `.rpm` in Rocky Linux 9 and 10 VMs with SELinux enforcing
+(`tools/vm.sh`, the same file in every Azentrius add-on; do not edit it here alone), as the
+machine's user `ci`, with the browser on the runner; it is a pilot, not yet a required check, and
+fails on every SELinux denial during the test. Its artifacts `e2e-rocky-9` and `e2e-rocky-10` have
+the screenshots and the logs of Cockpit, the SSH server, the journal and the audit log.
 
 ## How the board is built
 
