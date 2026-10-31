@@ -53,7 +53,7 @@ jobs:
           sha256sum -c "$RUNNER_TEMP/archive.sha256"
       - name: Packages (.deb, .rpm) with valid AppStream data, built twice to the same bytes
         run: |
-          sudo apt-get update -qq
+          sudo sh tools/apt-update.sh
           sudo apt-get install -y -qq --no-install-recommends rpm appstream > /dev/null
           appstreamcli validate --no-net packaging/*.metainfo.xml
           make packages
@@ -120,7 +120,7 @@ jobs:
           persist-credentials: false
       - name: Packages
         run: |
-          sudo apt-get update -qq
+          sudo sh tools/apt-update.sh
           sudo apt-get install -y -qq --no-install-recommends rpm > /dev/null
           make packages
       - name: Install, check and remove on ${{ matrix.image }}
@@ -159,7 +159,7 @@ jobs:
       - name: Install Cockpit, the SSH server and the test add-on
         run: |
           . /etc/os-release
-          sudo apt-get update
+          sudo sh tools/apt-update.sh
           sudo apt-get install -y --no-install-recommends -t "$VERSION_CODENAME-backports" cockpit-ws cockpit-bridge cockpit-system
           sudo apt-get install -y --no-install-recommends openssh-server
           dpkg-query -W cockpit-ws cockpit-bridge openssh-server
@@ -293,7 +293,7 @@ jobs:
           python-version: "3.12"
       - name: The package of this build, QEMU and cloud-init's seed tool
         run: |
-          sudo apt-get update -qq
+          sudo sh tools/apt-update.sh
           sudo apt-get install -y -qq --no-install-recommends rpm qemu-system-x86 qemu-utils cloud-image-utils > /dev/null
           make packages
       - name: Check tools (pinned in test/requirements.txt)
