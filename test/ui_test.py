@@ -121,7 +121,7 @@ def no_problems(page, what):
 
 def renamed(page, value):
     """value (a text, or what JSON carries) with the neutral names of the page's scenario (demo,
-    demo-tasks: NEUTRAL in test/web/mock-cockpit.js) in place of the recorded ones."""
+    demo-tasks: NEUTRAL in test/web/mock-cockpit.js) in place of those in the test answers."""
     text = value if isinstance(value, str) else json.dumps(value)
     for recorded, neutral in mock(page, "names"):
         text = text.replace(recorded, neutral)
@@ -237,7 +237,7 @@ with sync_playwright() as p:
     heads = page.evaluate("""() => Array.from(document.querySelectorAll('.sb-host__header')).map(h =>
         [h.querySelector('h2').innerText, (h.querySelector('.az-meta') || {}).innerText || null])""")
     check(heads == [["bastion", "dieser Host"], ["ci1 (CI)", "ci1"], ["db1", "db1:2222"],
-                    ["locked-host", None], ["old-host", None], ["web1", "stefan@web1"]],
+                    ["locked-host", None], ["old-host", None], ["web1", "jdoe@web1"]],
           "host names: the switcher's label, else the host's own name; the connection when it differs: " + repr(heads))
 
     # tiles: one per add-on, in the same order on every host
@@ -285,7 +285,7 @@ with sync_playwright() as p:
     check(host_label(page, "old-host") == [LABEL["danger"] + " az-label--strong", "Nicht erreichbar"],
           "a host that cannot be reached says so next to its name: " + repr(host_label(page, "old-host")))
     t = tile_text(page, "locked-host/locked")
-    check(tile_label(page, "locked-host/locked") == [LABEL["warning"], "Schlüssel gesperrt", True] and "/home/stefan/.ssh/id_ed25519" in t
+    check(tile_label(page, "locked-host/locked") == [LABEL["warning"], "Schlüssel gesperrt", True] and "/home/jdoe/.ssh/id_ed25519" in t
           and "Host-Umschalter" in t, "a locked SSH key: " + t)
     check(host_label(page, "locked-host") == [LABEL["warning"] + " az-label--strong", "Schlüssel gesperrt"],
           "and so does a locked key: " + repr(host_label(page, "locked-host")))
@@ -315,11 +315,11 @@ with sync_playwright() as p:
 
     # what the page did on the hosts
     channels = calls(page, "channel")
-    check(sorted(c["host"] for c in channels) == sorted(["stefan@web1", "ci1", "db1:2222", "old-host", "locked-host"]) and
+    check(sorted(c["host"] for c in channels) == sorted(["jdoe@web1", "ci1", "db1:2222", "old-host", "locked-host"]) and
           all(c["payload"] == "echo" and sorted(c["opts"]) == ["host", "payload"] for c in channels),
           "one echo channel per other host, with the switcher's connection string: " + json.dumps(channels))
     spawns = calls(page, "spawn")
-    reachable = {"stefan@web1", "ci1", "db1:2222"}
+    reachable = {"jdoe@web1", "ci1", "db1:2222"}
     bad = [c for c in spawns if not (
         (c["args"] == FIND and c["host"] in reachable and c["opts"] == {"host": c["host"], "err": "message"}) or
         (len(c["args"]) == 4 and re.match(r"^/usr/lib/cockpit-[a-z0-9-]+/", c["args"][0]) and c["args"][1:] == ["status", "--lang", "de"] and
@@ -860,7 +860,7 @@ with sync_playwright() as p:
         have = {k: v for k, v in by.get(key, {}).items() if k in w}
         check(have == w, "the task " + key + ": " + repr(have))
     check(by["ci1/cronjobs/coverage"]["detail"].startswith("Ohne Administratorzugriff ist hier nichts lesbar."), "no access says why")
-    check(by["locked-host/locked"]["sub"] == "/home/stefan/.ssh/id_ed25519" and by["locked-host/locked"]["button"] == "Host öffnen", "a locked key")
+    check(by["locked-host/locked"]["sub"] == "/home/jdoe/.ssh/id_ed25519" and by["locked-host/locked"]["button"] == "Host öffnen", "a locked key")
     check([by[k]["chips"] for k in ("ci1/cronjobs/coverage", "ci1/image-updates/coverage")] == [[], []],
           "the gaps of a host without a target profile name no role")
 

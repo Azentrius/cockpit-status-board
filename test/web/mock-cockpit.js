@@ -9,7 +9,7 @@
  * Query parameters: scenario=default|real|demo|tasks|demo-tasks|expected|limits|edge|hostile|broken|empty,
  * chunk (characters per streamed chunk), badhosts=1 (the invalid names of the machines fixture stay
  * in the list), delay (ms per answer). demo and demo-tasks are real and tasks with neutral names
- * (NEUTRAL) instead of the recorded ones: the README's screenshots. Tests change window.__mock at
+ * (NEUTRAL) instead of those in the test answers: the README's screenshots. Tests change window.__mock at
  * run time and read what the page did from it: calls, jumps, watches, unexpected, locations (every
  * cockpit.location.go()); names says what the scenario replaces. The page's location is its hash
  * (#/hosts), as in Cockpit. */
@@ -43,15 +43,16 @@
     }
 
     /* The scenarios demo and demo-tasks put these names, in this order, in place of the names in
-       the recordings of real hosts: the user, and the jobs, containers and services on them (the
+       the add-ons' test answers: the user, and the jobs, containers and services on them (the
        hosts of the switcher's list have neutral names already: web1, ci1, db1, this host
        bastion). Plain replacements of text; none of them touches a key of the status contract, a
        manifest (the Image Update Monitor's command keeps diun-update.py) or a fixture's name. */
     const NEUTRAL = [
-        ["stefan", "admin"],
-        ["backup-db-7c1e", "nightly-backup"], ["ollama", "search"], ["prod-mcp-1", "prod-api-1"],
-        ["docuseal", "shop"], ["glitchtip", "tracker"], ["plausible_db", "stats_db"], ["actual-ai", "cache"],
-        ["actual_server", "app_server"], ["calcom-db", "calendar-db"], ["21115/tcp relay-id", "8443/tcp https-alt"],
+        ["jdoe", "admin"],
+        ["backup-db-7c1e", "nightly-backup"], ["inference", "search"], ["tools-mcp-1", "prod-api-1"],
+        ["contracts", "shop"], ["glitchtip", "tracker"], ["bugs", "tracker"], ["metrics_db", "stats_db"],
+        ["budget-ai", "cache"], ["budget_server", "app_server"], ["booking-db", "calendar-db"],
+        ["47101/tcp broker", "8443/tcp https-alt"],
     ];
     const rename = (names, text) => names.reduce((t, [from, to]) => t.split(from).join(to), text);
 
@@ -75,7 +76,7 @@
                     cronjobs: pkg("cronjobs", "good-cronjobs-ok"),
                     "image-updates": pkg("image-updates", "good-image-updates"),
                 })),
-                "stefan@web1": host("web1", {
+                "jdoe@web1": host("web1", {
                     system: pkg("system", null),
                     cronjobs: pkg("cronjobs", "good-cronjobs-danger"),
                     "image-updates": pkg("image-updates", "good-image-updates"),
@@ -112,7 +113,7 @@
                         security: pkg("security", "real-security-edge"),
                         "update-gaps": pkg("update-gaps", "good-update-gaps"),
                     })),
-                    "stefan@web1": host("web1", {
+                    "jdoe@web1": host("web1", {
                         system: pkg("system", null),
                         cronjobs: pkg("cronjobs", "real-cronjobs"),
                         "image-updates": pkg("image-updates", "real-image-updates"),
@@ -157,7 +158,7 @@
                         "host-settings": pkg("host-settings", "ext-good-host-settings"),
                         cronjobs: pkg("cronjobs", "good-cronjobs-ok"),
                     })),
-                    "stefan@web1": host("web1", {
+                    "jdoe@web1": host("web1", {
                         system: pkg("system", null),
                         cronjobs: pkg("cronjobs", "good-cronjobs-danger"),
                         "image-updates": pkg("image-updates", "good-image-updates"),
@@ -326,7 +327,7 @@
     /* What the bridge sends when it cannot reach a host (src/cockpit/remote.py). */
     function closeOf(reach) {
         switch (reach) {
-        case "locked": return { problem: "authentication-failed", error: M.rewrite("locked identity: /home/stefan/.ssh/id_ed25519"),
+        case "locked": return { problem: "authentication-failed", error: M.rewrite("locked identity: /home/jdoe/.ssh/id_ed25519"),
                                 "auth-method-results": { publickey: "not-provided" } };
         case "no-host": return { problem: "no-host", message: "[Errno -2] Name or service not known" };
         default: return { problem: reach };
