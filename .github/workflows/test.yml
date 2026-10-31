@@ -396,9 +396,10 @@ jobs:
           rm ~/sb/agent-key
           ssh-add -l
           # what the bridge will meet: the agent's key logs in (and the login prints nothing but
-          # the command's output), the locked key does not without its passphrase, port 2023 is closed
-          test "$(ssh -p 2022 -o BatchMode=yes e2e-peer echo ok)" = ok
-          if ssh -p 2022 -o BatchMode=yes e2elocked@e2e-locked true; then
+          # the command's output), the locked key does not without its passphrase, port 2023 is
+          # closed. ssh -n: this script is ssh's standard input otherwise.
+          test "$(ssh -n -p 2022 -o BatchMode=yes e2e-peer echo ok)" = ok
+          if ssh -n -p 2022 -o BatchMode=yes e2elocked@e2e-locked true; then
               echo "e2elocked logged in without the passphrase" >&2; exit 1
           fi
           if ss -Htln '( sport = :2023 )' | grep -q .; then
@@ -414,6 +415,8 @@ jobs:
           cat ~/sb/cockpit-ws.log
           exit 1
           EOF
+          # and from here, as the browser will reach it (a script cut short would have ended well)
+          curl -fsS -o /dev/null http://127.0.0.1:9091/cockpit/@localhost/status-board/index.html
       - name: The Playwright server here, tunnelled into the machine
         run: |
           nohup python -m playwright run-server --port 3333 --host 127.0.0.1 > "$RUNNER_TEMP/playwright-server.log" 2>&1 &
