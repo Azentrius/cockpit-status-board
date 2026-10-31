@@ -29,6 +29,10 @@ The other hosts are this machine under other names. It changes the machine, so t
     (readable by this user): this user logs in with a key that is only in the ssh-agent, the user
     e2elocked only with the encrypted key ~/.ssh/id_ed25519, which is not in the agent; nothing
     listens on port 2023; the host keys of e2e-peer and e2e-locked are in ~/.ssh/known_hosts.
+The job e2e-el sets up the same in a Rocky Linux VM with SELinux enforcing (tools/vm.sh), with the
+package instead of src/, and runs this test there as the machine's user ci: the SSH server's log is
+then E2E_SSHD_LOG, and PLAYWRIGHT_WS names the Playwright server whose browser to use (it stays on
+the CI runner, which reaches the machine's Cockpit at the same address).
 Run: python3 test/e2e_cockpit.py   (screenshots go to test/shots/)"""
 import getpass
 import os
@@ -230,7 +234,9 @@ check(logins >= 1, "the SSH server's log has the job's test login, so that login
 check(ssh_connections() == 0, "no SSH connection before the board opens")
 
 with sync_playwright() as p:
-    browser = p.chromium.launch()
+    # In a VM the browser runs on the CI runner (python -m playwright run-server), the test here.
+    ws = os.environ.get("PLAYWRIGHT_WS")
+    browser = p.chromium.connect(ws) if ws else p.chromium.launch()
     ctx = browser.new_context(viewport={"width": 1280, "height": 900}, locale="en-US")
     ctx.add_cookies([{"name": "CockpitLang", "value": "en-us", "url": ROOT + "/"}])
     page = ctx.new_page()

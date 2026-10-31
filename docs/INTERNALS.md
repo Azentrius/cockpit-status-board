@@ -7,7 +7,8 @@ add-on has to send, and what the board accepts from it, is the **status contract
 The Cockpit code named here is that of Cockpit 360 (Ubuntu 26.04),
 `https://github.com/cockpit-project/cockpit/blob/360/<path>`. The board was written against it and
 tested against a stand-in for Cockpit (`test/web/mock-cockpit.js`), in CI against a real Cockpit
-with SSH to the test machine itself (`test/e2e_cockpit.py`), and by hand on a bastion with real
+with SSH to the test machine itself (`test/e2e_cockpit.py`, on Ubuntu and in Rocky Linux VMs with
+SELinux enforcing), and by hand on a bastion with real
 hosts; see "Tested against real Cockpit" at the end.
 
 ## Hosts
@@ -371,6 +372,13 @@ closed port. It checks:
   connection, `pkg/shell/state.tsx`): it asks "Connect to HOST?" once (`pkg/shell/hosts_dialog.jsx`,
   `connect_host`), then connects and opens the page;
 - that the board finds the shell's meta tag `allow-multihost`.
+
+The job `e2e-el` runs the same test in Rocky Linux 9 and 10 VMs (`tools/vm.sh`) with SELinux
+enforcing and the distribution's Cockpit, with the `.rpm` installed. The test runs there as the
+machine's user `ci`, so the bridge runs in the domain of a user who logged in, as on a bastion.
+The SSH server of the other hosts listens on port 2022, which SELinux lets `sshd` bind once the
+port has the type `ssh_port_t` (`semanage port -a`). The job fails on every SELinux denial from
+the start of the test to its end.
 
 ### Tested on a bastion
 

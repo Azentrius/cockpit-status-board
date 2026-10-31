@@ -163,11 +163,12 @@ tested system by itself.
 | | Systems | What is checked |
 |---|---|---|
 | **Tested** | Ubuntu 24.04 (GitHub runner) with Cockpit from Ubuntu's backports and `AllowMultiHost` on | the board in a real Cockpit (job `e2e`): the host list from the bridge, the other hosts over SSH (the runner itself under three names: with the key in the agent, with a locked key, on a closed port), one SSH connection per host for the board, Refresh and the shell, "Key locked", "Unreachable", the jumps into an add-on on this host and on another one, the tasks of those hosts and the tab in the shell's address |
+| **Tested** | Rocky Linux 9.8 and 10.2 (for RHEL 9 and 10) in VMs with SELinux enforcing, with the distribution's Cockpit and `AllowMultiHost` on | the same test with the `.rpm` (job `e2e-el`, `tools/vm.sh`; a pilot, not yet a required check), run by a user who is not root, with the SSH server of the other hosts on port 2022 (given the type `ssh_port_t` with `semanage`); no SELinux denial from the start of the test to its end |
 | **Tested** | Chromium, against a stand-in for Cockpit with Cockpit's CSP | the page with good, broken and hostile answers, the add-ons' real ones and answers with checks and findings, hosts with and without a target profile, both tabs and their location, the tasks and their jumps, unreachable hosts, a locked key, a timeout, the reload every 5 minutes, English and German, dark, a phone (job `test`, `test/ui_test.py`) |
 | **Tested by hand** | a bastion with Cockpit 360 and three hosts behind it (Cockpit 360 and 362, Ubuntu 24.04 and 26.04), 2026-10-20 | the seven steps of [Trying it on the bastion](#trying-it-on-the-bastion) |
 | **Recorded** | Cron Jobs 2.9.0, Image Update Monitor 0.24.1, Update Gaps 0.6.0, Security Monitor 0.2.0 | their status answers in English and German (`test/fixtures/status/real-*.json`), read by the offline and the browser tests |
 | **Package installs** | Debian 13 (`.deb`), Fedora 43 (`.rpm`) (job `test`); Rocky Linux and AlmaLinux 9 and 10 (`.rpm`, for RHEL 9 and 10; job `install`) | the package installs with the distribution's own Cockpit and removes cleanly; no Cockpit runs there |
-| **Expected, untested** | other versions of Debian, Ubuntu and Fedora, RHEL and openSUSE, with a Cockpit as current as the tested ones | the board in a real Cockpit there; the packages on Ubuntu, RHEL itself and openSUSE |
+| **Expected, untested** | other versions of Debian, Ubuntu and Fedora, RHEL itself and AlmaLinux (as Rocky Linux), openSUSE, with a Cockpit as current as the tested ones | the board in a real Cockpit there; the packages on Ubuntu, RHEL itself and openSUSE |
 
 ### The suite at a glance
 
@@ -178,11 +179,11 @@ itself, and nothing is checked on a system that only installs the package.
 
 | Add-on | Functional checks in CI | Package installs only (nothing checked there) | Not supported, or checks nothing |
 |---|---|---|---|
-| Status Board | Ubuntu 24.04 with Cockpit from its backports and other hosts over SSH; the page against a stand-in for Cockpit in Chromium | Debian 13, Fedora 43, Rocky Linux and AlmaLinux 9 and 10 | |
+| Status Board | Ubuntu 24.04 with Cockpit from its backports and other hosts over SSH; Rocky Linux 9.8 and 10.2 the same, with SELinux enforcing; the page against a stand-in for Cockpit in Chromium | Debian 13, Fedora 43, AlmaLinux 9 and 10 | |
 | Host Settings | Ubuntu 24.04 with systemd, ntfy and postfix; Rocky Linux 9.8 and 10.2 with SELinux enforcing | Debian 13, Fedora 43, AlmaLinux 9 and 10 | |
 | Update Gaps | Ubuntu 24.04 in a real Cockpit; its checks on Debian 12 and 13 and Ubuntu 22.04, 24.04 and 26.04 in containers | Fedora 43, Rocky Linux 9 and 10 | Fedora, RHEL and openSUSE: the package installs, but the add-on checks nothing there (apt systems only); releases and the package repository carry no `.rpm` |
 | Security Monitor | Ubuntu 24.04 with UFW, fail2ban and Docker; recordings of four Ubuntu servers | Debian 13, Fedora 43 | Fedora, RHEL and openSUSE: not supported yet; releases carry no `.rpm`, and the package repository serves it for Debian and Ubuntu only |
-| Image Update Monitor | Ubuntu 24.04 with Docker Engine and Compose, and in a real Cockpit | Debian 12 and 13, Ubuntu 22.04, Fedora 43, Rocky Linux and AlmaLinux 9 and 10, openSUSE Leap 16.0 | Podman, Compose 1.x and below 2.8, Swarm, Kubernetes, rootless Docker, systems without systemd |
+| Image Update Monitor | Ubuntu 24.04 with Docker Engine and Compose, and in a real Cockpit; Rocky Linux 9.8 and 10.2 the same, with Docker's `docker-ce` and SELinux enforcing | Debian 12 and 13, Ubuntu 22.04, Fedora 43, AlmaLinux 9 and 10, openSUSE Leap 16.0 | Podman, Compose 1.x and below 2.8, Swarm, Kubernetes, rootless Docker, systems without systemd |
 | Cron Jobs | Ubuntu 24.04 with its own Cockpit and the one of its backports; Rocky Linux 9 and 10 with cronie and SELinux enforcing | Debian 13, Fedora 43, AlmaLinux 9 and 10 | BusyBox cron (Alpine) |
 
 Beyond these columns each README names the systems that are expected to work but untested (for
