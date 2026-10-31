@@ -126,9 +126,9 @@ style and the phone show scenario `demo`: the answers that Cron Jobs 2.9.0, Imag
 0.24.1, Update Gaps 0.6.0 and Security Monitor 0.2.0 give on their own test data (scenario
 `real`). Needs attention and the coverage with target profiles show scenario `demo-tasks`: answers
 with checks, findings and a target profile (scenario `tasks`). The hosts of the tests have neutral
-names (web1, ci1, db1, bastion), and the user and what runs on the hosts get neutral names in place
-of the recorded ones. Each test run keeps the pictures as `readme-*.png` in the artifact
-`screenshots`.
+names (web1, ci1, db1, bastion), and the user and what runs on the hosts get other neutral names in
+place of those in the test answers. Each test run keeps the pictures as `readme-*.png` in the
+artifact `screenshots`.
 
 ## How it works
 
@@ -182,7 +182,7 @@ itself, and nothing is checked on a system that only installs the package.
 | Status Board | Ubuntu 24.04 with Cockpit from its backports and other hosts over SSH; Rocky Linux 9.8 and 10.2 the same, with SELinux enforcing; the page against a stand-in for Cockpit in Chromium | Debian 13, Fedora 43, AlmaLinux 9 and 10 | |
 | Host Settings | Ubuntu 24.04 with systemd, ntfy and postfix; Rocky Linux 9.8 and 10.2 with SELinux enforcing | Debian 13, Fedora 43, AlmaLinux 9 and 10 | |
 | Update Gaps | Ubuntu 24.04 in a real Cockpit; its checks on Debian 12 and 13 and Ubuntu 22.04, 24.04 and 26.04 in containers | Fedora 43, Rocky Linux 9 and 10 | Fedora, RHEL and openSUSE: the package installs, but the add-on checks nothing there (apt systems only); releases and the package repository carry no `.rpm` |
-| Security Monitor | Ubuntu 24.04 with UFW, fail2ban and Docker; recordings of four Ubuntu servers | Debian 13, Fedora 43 | Fedora, RHEL and openSUSE: not supported yet; releases carry no `.rpm`, and the package repository serves it for Debian and Ubuntu only |
+| Security Monitor | Ubuntu 24.04 with UFW, fail2ban and Docker; scenarios derived from four Ubuntu servers | Debian 13, Fedora 43 | Fedora, RHEL and openSUSE: not supported yet; releases carry no `.rpm`, and the package repository serves it for Debian and Ubuntu only |
 | Image Update Monitor | Ubuntu 24.04 with Docker Engine and Compose, and in a real Cockpit; Rocky Linux 9.8 and 10.2 the same, with Docker's `docker-ce` and SELinux enforcing | Debian 12 and 13, Ubuntu 22.04, Fedora 43, AlmaLinux 9 and 10, openSUSE Leap 16.0 | Podman, Compose 1.x and below 2.8, Swarm, Kubernetes, rootless Docker, systems without systemd |
 | Cron Jobs | Ubuntu 24.04 with its own Cockpit and the one of its backports; Rocky Linux 9 and 10 with cronie and SELinux enforcing | Debian 13, Fedora 43, AlmaLinux 9 and 10 | BusyBox cron (Alpine) |
 

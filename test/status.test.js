@@ -45,7 +45,7 @@ const EXPECT = {
     "real-update-gaps.de.json": { state: "warning", reported: "warning", items: 7, key: "held", value: "6", link: "#/held" },
     "real-security.json": { state: "danger", reported: "danger", items: 5, key: "containers", value: "1", link: "#/containers" },
     "real-security.de.json": { state: "danger", reported: "danger", items: 5, key: "containers", value: "1", link: "#/containers" },
-    /* the Security Monitor on its recordings of the other three hosts: bastion, ci1, db1 */
+    /* the Security Monitor on its derived scenarios for the other three hosts: bastion, ci1, db1 */
     "real-security-edge.json": { state: "danger", reported: "danger", items: 5, key: "containers", value: "1", link: "#/containers" },
     "real-security-edge.de.json": { state: "danger", reported: "danger", items: 5, key: "containers", value: "1", link: "#/containers" },
     "real-security-ci.json": { state: "danger", reported: "danger", items: 5, key: "containers", value: "5", link: "#/containers" },
@@ -654,7 +654,7 @@ t("parseMachines: the fixture, plain and as D-Bus variants", () => {
     for (const input of [raw, variants(raw)]) {
         const m = SB.parseMachines(input);
         assert.deepStrictEqual(m.hosts.map(x => [x.key, x.connection, x.label]), [
-            ["web1", "stefan@web1", null],
+            ["web1", "jdoe@web1", null],
             ["ci1", "ci1", "ci1 (CI)"],
             ["db1", "db1:2222", null],
             ["old-host", "old-host", null],
@@ -680,8 +680,8 @@ t("connectionString as the host switcher builds it", () => {
 });
 
 t("reachOf", () => {
-    assert.deepStrictEqual(SB.reachOf({ problem: "authentication-failed", error: "locked identity: /home/stefan/.ssh/id_ed25519" }),
-        { reach: "locked", identity: "/home/stefan/.ssh/id_ed25519" });
+    assert.deepStrictEqual(SB.reachOf({ problem: "authentication-failed", error: "locked identity: /home/jdoe/.ssh/id_ed25519" }),
+        { reach: "locked", identity: "/home/jdoe/.ssh/id_ed25519" });
     assert.deepStrictEqual(SB.reachOf({ problem: "authentication-failed", error: "authentication-failed" }),
         { reach: "unreachable", problem: "authentication-failed", message: null });
     assert.deepStrictEqual(SB.reachOf({ problem: "no-host", message: "[Errno -2] Name or service not known" }),
