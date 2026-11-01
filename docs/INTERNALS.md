@@ -380,6 +380,18 @@ The SSH server of the other hosts listens on port 2022, which SELinux lets `sshd
 port has the type `ssh_port_t` (`semanage port -a`). The job fails on every SELinux denial from
 the start of the test to its end.
 
+**The shared suite** (workflow `e2e-suite`, on every pull request, every push to `main` and by
+hand) installs this repository's candidate with the real packages of Security Monitor and Host
+Settings on a throw-away runner and checks the board's tasks, coverage and jumps against their
+real answers, with a real Cockpit and a second host over SSH. The suite is the reusable workflow
+`suite.yml` of Azentrius/cockpit-host-settings, pinned in `.github/workflows/e2e-suite.yml` by a
+full commit, passed as `suite` as well; the same commit gives the test and the released
+combination its counterparts come from. A pull request's candidate is its head commit; one that
+changes only text skips the suite, and `e2e-suite / gate` still reports. The release requires the
+push run on the commit it releases. Details: `docs/INTERNALS.md` of Host Settings, "The shared
+suite (E2E-1)". After a change of the suite or of its combination there, the pin moves to the
+merged commit in a pull request here.
+
 ### Tested on a bastion
 
 On 2026-10-20, by hand, the README's seven steps ("Trying it on the bastion") ran on a bastion with
