@@ -34,8 +34,8 @@ fixtures are written for 2026-10-19 19:00 UTC; the tests pass that time, and the
 the clock to it.
 
 The `test` workflow runs the lint, the offline tests, the archive and the packages (each built twice
-to the same bytes, installed on Debian and Fedora) and the browser tests on every push and pull
-request. The job `e2e` runs the board in a real Cockpit with SSH to the runner itself
+to the same bytes, installed on Debian and Fedora) and the browser tests on every pull request and every
+push to `main`. The job `e2e` runs the board in a real Cockpit with SSH to the runner itself
 (`test/e2e_cockpit.py`). Its steps install Cockpit and an SSH server, add a user and change
 `/etc/hosts`, so it runs only on CI's throwaway machine, never on one you use. The job `e2e-el`
 runs the same test with the `.rpm` in Rocky Linux 9 and 10 VMs with SELinux enforcing
