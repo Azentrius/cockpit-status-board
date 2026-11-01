@@ -6,7 +6,7 @@
  * test/serve.py): the manifests, and the output of each add-on's status verb, the German one
  * when there is a .de.json and the page asks with --lang de.
  *
- * Query parameters: scenario=default|real|demo|tasks|demo-tasks|expected|limits|edge|hostile|broken|empty,
+ * Query parameters: scenario=default|real|demo|tasks|demo-tasks|expected|named|limits|edge|hostile|broken|empty,
  * chunk (characters per streamed chunk), badhosts=1 (the invalid names of the machines fixture stay
  * in the list), delay (ms per answer). demo and demo-tasks are real and tasks with neutral names
  * (NEUTRAL) instead of those in the test answers: the README's screenshots. Tests change window.__mock at
@@ -194,6 +194,30 @@
                     system: pkg("system", null),
                     cronjobs: pkg("cronjobs", "good-cronjobs-ok"),
                     "image-updates": pkg("image-updates", "good-image-updates"),
+                }),
+            },
+        }),
+        /* Checks a host's profile names (the shared fixtures ext-expect-*.json): Host Settings on
+           this host ("board-host") and on web-host (role build) expects its four add-ons and the
+           Security Monitor's checks exposure, fail2ban, contaners (misspelled) and firewall (left
+           out with a reason until 20 October). Here the Security Monitor answers validly but
+           reports its check ssh only; on web-host it reports exposure, containers (in part) and
+           fail2ban (not applicable). Cron Jobs and Update Gaps answer without checks. */
+        named: () => ({
+            machines: { "web-host": { visible: true } },
+            hosts: {
+                localhost: host("board-host", Object.assign(cockpitPackages(), {
+                    "host-settings": pkg("host-settings", "ext-expect-host-settings"),
+                    security: pkg("security", "ext-expect-security-ssh"),
+                    cronjobs: pkg("cronjobs", "good-cronjobs-ok"),
+                    "update-gaps": pkg("update-gaps", "good-update-gaps"),
+                })),
+                "web-host": host("web-host", {
+                    system: pkg("system", null),
+                    "host-settings": pkg("host-settings", "ext-expect-host-settings"),
+                    security: pkg("security", "ext-good-security"),
+                    cronjobs: pkg("cronjobs", "good-cronjobs-ok"),
+                    "update-gaps": pkg("update-gaps", "good-update-gaps"),
                 }),
             },
         }),

@@ -1124,6 +1124,75 @@ with sync_playwright() as p:
     no_problems(page, "expected, tasks")
     page.context.close()
 
+    # ---------- checks a host's profile names (scenario named: the shared fixtures ext-expect-*.json) ----------
+    # Expected values from lib/status.js at 2026-10-19 19:00 UTC: Host Settings on board-host and on
+    # web-host (role build) expects its four add-ons and the Security Monitor's checks exposure,
+    # fail2ban, contaners (misspelled) and firewall (left out until 20 October). board-host's Security
+    # Monitor answers validly with its check ssh only; web-host's reports exposure, containers (in
+    # part) and fail2ban (not applicable). A check the add-on does not report is a gap of its own; the
+    # add-on counts once.
+    NAMED_LINES = {
+        "localhost": ["3 of 4 expected add-ons checked · Security Monitor: exposure not reported", [["sb-chip", "Role build"]]],
+        "web-host": ["3 of 4 expected add-ons checked · Security Monitor: contaners not reported", [["sb-chip", "Role build"]]],
+    }
+    NAMED_BOARD = [False, "6 of 8 expected add-ons checked", [[LABEL["warning"], "2 not supported"]]]
+    page = open_page(browser, "scenario=named&lang=en")
+    check(expected_coverage(page) == (NAMED_LINES, NAMED_BOARD),
+          "each host's line names the check its Security Monitor does not report: " + repr(expected_coverage(page)))
+    check(tile_label(page, "localhost/security") == [LABEL["ok"], "OK", True], "the add-on's own state stays: " + repr(tile_label(page, "localhost/security")))
+    # only what needs attention keeps the expected Security Monitor with its gap, although its own state is OK
+    page.click(".az-switch")
+    page.wait_for_timeout(50)
+    keys = page.evaluate("() => Array.from(document.querySelectorAll('.sb-tile')).map(t => t.dataset.key)")
+    check(page.is_checked("#only-notable") and keys == ["localhost/security", "localhost/update-gaps", "web-host/security", "web-host/update-gaps"],
+          "the switch keeps an expected add-on with a check it does not report: " + repr(keys))
+    check(expected_coverage(page) == (NAMED_LINES, NAMED_BOARD), "the lines and the board's coverage stay with the switch: " + repr(expected_coverage(page)))
+    shot(page, "named-hosts")
+    no_problems(page, "named")
+    page.context.close()
+
+    page = open_page(browser, "scenario=named", tab="hosts")
+    page.click(".az-switch")
+    page.wait_for_timeout(50)
+    line = page.inner_text('[data-host="localhost"] .sb-host__coverage .sb-host__figure')
+    check(line == "3 von 4 erwarteten Add-ons geprüft · Security Monitor: exposure nicht gemeldet", "the line in German, with the switch: " + line)
+    no_problems(page, "named, German")
+    page.context.close()
+
+    page = open_page(browser, "scenario=named&lang=en", tab=None)
+    got = tasks(page)
+    by = {x["key"]: x for x in got}
+    check([x["key"] for x in got if "/coverage" in x["key"]] == ["localhost/security/coverage", "web-host/security/coverage"],
+          "one task per Security Monitor: " + repr([x["key"] for x in got]))
+    resolved = ["Resolved when", "the add-on answers in time, with every check complete"]
+    want = {
+        "localhost/security/coverage": {
+            "group": "warning", "title": "Security Monitor: exposure not reported", "where": "board-host · Security Monitor",
+            "chips": ["expected for role build"],
+            "detail": "exposure: Expected check is not reported; fail2ban: Expected check is not reported; contaners: Expected check is not reported",
+            "facts": [["Evidence", "Checked 20:50"], resolved], "button": "Open in Security Monitor"},
+        "web-host/security/coverage": {
+            "group": "warning", "title": "Security Monitor: contaners not reported", "where": "web-host · Security Monitor",
+            "chips": ["expected for role build"], "detail": "Container hardening: Docker could not be asked; contaners: Expected check is not reported",
+            "facts": [["Evidence", "Checked 20:50"], resolved], "button": "Open in Security Monitor"},
+    }
+    for key, w in want.items():
+        have = {k: v for k, v in by.get(key, {}).items() if k in w}
+        check(have == w, "the task " + key + ": " + repr(have))
+    task_button(page, "localhost/security/coverage").click()
+    task_button(page, "web-host/security/coverage").click()
+    check(mock(page, "jumps") == [["/security", None], ["/security", "web-host"]], "they open the Security Monitor on its host: " + json.dumps(mock(page, "jumps")))
+    page.click('[data-fold="notapplicable"] .sb-fold__toggle')
+    na = next((f for f in folds(page) if f["fold"] == "notapplicable"), {})
+    firewall = "packet filter checked by the provider until the move"
+    check(na.get("rows") == [["firewall", "board-host", "Security Monitor", firewall, "Target profile, until Oct 20, 02:00"],
+                             ["fail2ban", "web-host", "Security Monitor", "fail2ban is not installed", "Add-on"],
+                             ["firewall", "web-host", "Security Monitor", firewall, "Target profile, until Oct 20, 02:00"]],
+          "a check left out on purpose shows with its reason until its day, and fail2ban with the add-on's own: " + repr(na))
+    shot(page, "named-tasks")
+    no_problems(page, "named, tasks")
+    page.context.close()
+
     # ---------- what the suite does not cover yet, and the evidence of an item with findings (scenario limits) ----------
     # Expected values from lib/status.js (buildBoard, buildTasks, coverageSummary) at 2026-10-19
     # 19:00 UTC: this host has the Security Monitor (its list counts one finding and lists none, its

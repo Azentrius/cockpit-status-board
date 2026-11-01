@@ -80,6 +80,11 @@ of the address (`#/tasks`, `#/hosts`), so Back, a reload and a bookmark keep it.
   add-on that is not installed there is a warning, "Update Gaps is missing" (the board cannot know
   its package name, so it only says that the profile expects it); one installed in a version
   without a status is a gap as well, also where no other host has a version with one. A check the
+  profile names (`security/exposure`) must be reported by its add-on: one the add-on does not
+  report, a misspelled one included, is a gap of its own, "Security Monitor: exposure not
+  reported", a warning and part of the add-on's task, with the reason "Expected check is not
+  reported"; two such checks are two gaps of one add-on, which still counts once. While the
+  add-on itself is missing or cannot be read, its own gap stands for its checks. A check the
   profile leaves out is not applicable until its end
   date and counts nowhere. An add-on the profile does not expect counts in no figure, and its gaps
   are softer: out of date, partly checked or failed are a notice, no access, not set up or not
@@ -103,8 +108,9 @@ of the address (`#/tasks`, `#/hosts`), so Back, a reload and a bookmark keep it.
 - **Only what needs attention:** on the tab Hosts and coverage, a switch in the header leaves out
   the tiles in OK, Unknown, Not installed and No status (and the unrated ones of add-ons a host is
   not expected to have); a host left without tiles says "Nothing that needs attention". The
-  coverage stays, and so do expected add-ons that are missing or report no status. The browser
-  keeps the choice.
+  coverage stays, and so do expected add-ons that are missing, report no status or have a gap in
+  their coverage (a check done in part, a check the profile names that is not reported). The
+  browser keeps the choice.
 - **Versions:** each tile names the add-on's version and says so when another host runs a newer
   one ("Version 0.2.0 runs on other hosts"), so a forgotten update shows.
 - **Current without you:** it loads on opening, on Refresh and every 5 minutes while the page is
@@ -164,7 +170,7 @@ tested system by itself.
 |---|---|---|
 | **Tested** | Ubuntu 24.04 (GitHub runner) with Cockpit from Ubuntu's backports and `AllowMultiHost` on | the board in a real Cockpit (job `e2e`): the host list from the bridge, the other hosts over SSH (the runner itself under three names: with the key in the agent, with a locked key, on a closed port), one SSH connection per host for the board, Refresh and the shell, "Key locked", "Unreachable", the jumps into an add-on on this host and on another one, the tasks of those hosts and the tab in the shell's address |
 | **Tested** | Rocky Linux 9.8 and 10.2 (for RHEL 9 and 10) in VMs with SELinux enforcing, with the distribution's Cockpit and `AllowMultiHost` on | the same test with the `.rpm` (job `e2e-el`, `tools/vm.sh`; a pilot, not yet a required check), run by a user who is not root, with the SSH server of the other hosts on port 2022 (given the type `ssh_port_t` with `semanage`); no SELinux denial from the start of the test to its end |
-| **Tested** | Chromium, against a stand-in for Cockpit with Cockpit's CSP | the page with good, broken and hostile answers, the add-ons' real ones and answers with checks and findings, hosts with and without a target profile, both tabs and their location, the tasks and their jumps, unreachable hosts, a locked key, a timeout, the reload every 5 minutes, English and German, dark, a phone (job `test`, `test/ui_test.py`) |
+| **Tested** | Chromium, against a stand-in for Cockpit with Cockpit's CSP | the page with good, broken and hostile answers, the add-ons' real ones and answers with checks and findings, hosts with and without a target profile, checks a profile names that an add-on does not report, both tabs and their location, the tasks and their jumps, unreachable hosts, a locked key, a timeout, the reload every 5 minutes, English and German, dark, a phone (job `test`, `test/ui_test.py`) |
 | **Tested by hand** | a bastion with Cockpit 360 and three hosts behind it (Cockpit 360 and 362, Ubuntu 24.04 and 26.04), 2026-10-20 | the seven steps of [Trying it on the bastion](#trying-it-on-the-bastion) |
 | **Recorded** | Cron Jobs 2.9.0, Image Update Monitor 0.24.1, Update Gaps 0.6.0, Security Monitor 0.2.0 | their status answers in English and German (`test/fixtures/status/real-*.json`), read by the offline and the browser tests |
 | **Package installs** | Debian 13 (`.deb`), Fedora 43 (`.rpm`) (job `test`); Rocky Linux and AlmaLinux 9 and 10 (`.rpm`, for RHEL 9 and 10; job `install`) | the package installs with the distribution's own Cockpit and removes cleanly; no Cockpit runs there |
@@ -345,7 +351,7 @@ make packages     # dist/*.deb and dist/*.rpm (needs dpkg-deb and rpmbuild), rep
 
 `python3 test/serve.py` serves the page with the stand-in at
 `http://127.0.0.1:8773/pkg/status-board/index.html` (`?scenario=real`, `demo`, `tasks`, `demo-tasks`,
-`expected`, `limits`, `edge`, `hostile`, `broken` or `empty`, `?lang=en`). The fixtures in `test/fixtures` are written for
+`expected`, `named`, `limits`, `edge`, `hostile`, `broken` or `empty`, `?lang=en`). The fixtures in `test/fixtures` are written for
 2026-10-19 19:00 UTC; the browser tests set their clock to it. The shared design files in `src/` are byte-identical copies from
 Cron Jobs (`tools/design-files.sha256`); never change them here.
 
@@ -395,9 +401,6 @@ More in [CONTRIBUTING.md](CONTRIBUTING.md).
 - An answer of a status command may be 64 KiB at most: the board stops reading a longer one as soon
   as it passes that size, and the tile says so.
 - Versions are compared between the hosts only; the board does not look for new releases.
-- A check that a target profile names (`security/exposure`) makes its add-on expected, but the
-  board judges coverage per add-on: a named check the add-on does not report at all is no gap of
-  its own.
 - The suite does not check everything a host needs: a proof of backup and restore across the
   suite, all known vulnerabilities, the lifecycle of TLS certificates, configuration drift and
   identity checks are planned. The board names them below each host and counts them nowhere.

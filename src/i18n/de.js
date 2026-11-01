@@ -88,6 +88,8 @@
             noaccess: check => `${check} ohne Zugriff`,
             unsupported: check => `${check} hier nicht unterstützt`,
         },
+        checkNotReported: check => `${check} nicht gemeldet`,
+        notReported: "Erwartete Prüfung wird nicht gemeldet",
 
         newMark: "neu",
         chips: {

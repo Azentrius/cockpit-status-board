@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+A check that a host's target profile names counts only when its add-on reports it.
+
+- **Named checks:** where a profile expects a check (`security/exposure`) and its add-on answers
+  validly without it, the board counts a check of its own for it, state `unsupported`, with the
+  reason "Expected check is not reported". It is a warning, part of the add-on's task and a gap of
+  the host's coverage ("Security Monitor: exposure not reported"); each such check is a gap, the
+  add-on counts once. Until now the profile only made the add-on expected, and a named check the
+  add-on did not report was no gap at all. A check reported as not applicable keeps its own
+  reason, a skip that runs leaves the check out until its day, and an add-on that is missing, has
+  no status, cannot be read or answers without access keeps its own gap without a second task.
+  An add-on expected alone is judged as before.
+- **Only what needs attention:** an expected add-on with a gap in its coverage stays, whatever its
+  own state, so a check that is not reported does not vanish with the switch.
+- **Status contract:** the rule for named checks in `docs/STATUS-CONTRACT.md`, without a new
+  required field. Two shared answers, `test/fixtures/status/ext-expect-*.json`, hold the cases for
+  Host Settings as well.
+
 ## 0.3.0 – 2026-10-26
 
 What needs attention on all hosts in a tab of its own, the coverage of every host from the

@@ -84,6 +84,10 @@ const EXPECT = {
     "ext-hostile.json": { state: "danger", reported: "warning", items: 2, key: "exposure", value: "120" },
     "ext-hostile-profile.json": { state: "ok", reported: "ok", items: 1, key: "run" },
     "ext-incompatible-schema-2.json": { pkg: "security", reason: "schema", detail: "2" },
+    /* checks a host's profile names (see the tests "named checks" below), shared with Host
+       Settings: its profile, and a Security Monitor that reports its check ssh only */
+    "ext-expect-host-settings.json": { state: "ok", reported: "ok", items: 3, key: "setup", value: "1" },
+    "ext-expect-security-ssh.json": { state: "ok", reported: "ok", items: 1, key: "ssh", value: null, link: "#/ssh" },
     /* when a list of findings is complete, shared with Host Settings (see the tests "complete"
        below); what the item says counts either way */
     "ext-complete-total-1-empty.json": { state: "danger", reported: "danger", items: 1, key: "exposure", value: "1", link: "#/exposure" },
@@ -425,7 +429,8 @@ t("optional parts: a hostile profile", () => {
 });
 
 t("optional parts: every text is cleaned and cut", () => {
-    ["ext-good-security.json", "ext-good-update-gaps.json", "ext-good-host-settings.json", "ext-hostile.json", "ext-hostile-profile.json"].forEach(f => {
+    ["ext-good-security.json", "ext-good-update-gaps.json", "ext-good-host-settings.json", "ext-hostile.json", "ext-hostile-profile.json",
+     "ext-expect-host-settings.json", "ext-expect-security-ssh.json"].forEach(f => {
         const st = ext(f);
         const texts = [].concat(
             (st.checks || []).flatMap(c => [c.title, c.reason]),
@@ -537,6 +542,12 @@ t("notable: notices, warnings and problems, and hosts still loading", () => {
          ["unreachable", "danger"], ["locked", "warning"], ["discovery", "warning"], ["loading", "none"]]
             .map(([k, s]) => SB.notable(tile(k, s))),
         [true, true, true, false, false, false, false, true, true, true, true, true, true, true]);
+    /* an expected add-on with a gap in its coverage needs attention whatever its own state; one the
+       host is not expected to have does not, below Notice */
+    assert.deepStrictEqual([
+        { kind: "status", state: "ok", expected: true, gap: "warning" }, { kind: "status", state: "ok", expected: true, gap: null },
+        { kind: "status", state: "ok", expected: false, gap: "info" }, { kind: "status", state: "none", expected: false, gap: "warning" },
+    ].map(SB.notable), [true, false, false, false]);
 });
 
 /* ---------- versions ---------- */
@@ -1500,6 +1511,156 @@ t("coverageSummary: only expected add-ons count", () => {
         { "host-settings": onlyHs, cronjobs: { kind: "noaccess" }, "image-updates": status("good-image-updates-stale.json") })], NOW);
     assert.deepStrictEqual(SB.coverageSummary(rows), { total: 1, checked: 1, gaps: { unchecked: 0, stale: 0, noaccess: 0, unreadable: 0 }, unread: 0, unreadState: "none" },
         "add-ons the host is not expected to have are no gap of the board's coverage");
+});
+
+/* ---------- checks a host's profile names ---------- */
+
+/* The shared fixtures, which Host Settings keeps byte-identical copies of: ext-expect-host-settings.json
+   is Host Settings with a profile of the role build that expects its four add-ons and the checks
+   security/exposure, security/fail2ban, security/contaners (a misspelling: the Security Monitor's
+   check is "containers") and security/firewall, which a skip with a reason leaves out until
+   2026-10-20. ext-expect-security-ssh.json is a Security Monitor that answers validly but reports
+   its check ssh only; ext-good-security.json reports exposure (checked), containers (partial) and
+   fail2ban (not applicable, with its reason). Cron Jobs and Update Gaps, expected as add-ons alone,
+   answer without checks. */
+const NAMED_PKGS = [HS, ["cronjobs", "cronjobs"], ["update-gaps", "update-gaps"]];
+/* web1 with these add-ons; security: the result of the Security Monitor's status call, or a list
+   [manifest, result] (null: not installed) */
+function named(security, now, profile) {
+    const [manifest, result] = Array.isArray(security) ? security : ["security", security];
+    return SB.buildBoard([okHost("web1", false, NAMED_PKGS.concat(manifest ? [["security", manifest]] : []),
+        Object.assign({ "host-settings": profile || status("ext-expect-host-settings.json"), cronjobs: status("good-cronjobs-ok.json"),
+                        "update-gaps": status("good-update-gaps.json") }, result ? { security: result } : {}))], now === undefined ? NOW : now);
+}
+const gapsOf = x => x.gapChecks.map(c => [c.id, c.coverage, c.notReported === true]);
+const coverageTasks = (rows, now) => tasksOf(rows, now).tasks.filter(x => x.kind === "coverage");
+const FIREWALL = "packet filter checked by the provider until the move";
+
+t("named checks: notReportedChecks makes up a check for each one the answer does not report, nothing more", () => {
+    const named3 = new Set(["security/exposure", "cronjobs/runs", "security/ssh", "security"]);
+    assert.deepStrictEqual(SB.notReportedChecks(null, "security", named3).map(c => c.id), ["exposure", "ssh"], "an answer without checks reports none");
+    const sec = ext("ext-expect-security-ssh.json");
+    assert.deepStrictEqual(SB.notReportedChecks(sec.checks, "security", named3), [{ id: "exposure", state: "unsupported", title: "exposure",
+        item: null, checkedAt: null, staleAfter: null, reason: null, link: null, notReported: true }], "ssh is reported; an add-on alone names no check");
+    assert.deepStrictEqual(SB.notReportedChecks(ext("ext-good-security.json").checks, "security", new Set(["security/fail2ban", "security/exposure"])), [],
+        "a check reported as not applicable is reported");
+    assert.deepStrictEqual(SB.notReportedChecks(null, "cronjobs", new Set()), [], "nothing named, nothing made up");
+    assert.deepStrictEqual(SB.notReportedChecks(null, "constructor", new Set(["constructor/tostring"])).map(c => c.id), ["tostring"]);
+    assert.ok(({}).constructor === Object && Object.prototype.polluted === undefined);
+});
+
+t("named checks: a valid answer without the check is a warning, a task and a gap of the coverage", () => {
+    /* the case of the review: the profile expects security/exposure, the Security Monitor reports ssh only */
+    const rows = named(status("ext-expect-security-ssh.json"));
+    const sec = tileOn(rows, "web1", "security");
+    assert.deepStrictEqual(brief(sec), ["security", "status", "ok", "ok", "unsupported", true, "warning"], "its own state stays OK; the gap is a warning");
+    assert.deepStrictEqual(gapsOf(sec), [["exposure", "unsupported", true], ["fail2ban", "unsupported", true], ["contaners", "unsupported", true]],
+        "each check it does not report, in the order of the profile, with its id; firewall is left out while its skip runs");
+    assert.strictEqual(sec.gapCheck.id, "exposure");
+    assert.ok(SB.notable(sec), "it stays with only what needs attention");
+    assert.deepStrictEqual(ext("ext-expect-security-ssh.json").checks.map(c => c.id), ["ssh"], "the add-on's answer itself stays as it is");
+    assert.deepStrictEqual(rows[0].coverage, { total: 4, checked: 3, gaps: [
+        { pkg: "security", label: "Security Monitor", coverage: "unsupported", check: "exposure", notReported: true }] });
+    assert.deepStrictEqual(SB.coverageSummary(rows),
+        { total: 4, checked: 3, gaps: { unchecked: 0, stale: 0, noaccess: 0, unreadable: 0, unsupported: 1 }, unread: 0, unreadState: "none" });
+    const gap = coverageTasks(rows);
+    assert.deepStrictEqual(gap.map(x => [x.key, x.state, x.coverage, x.title, x.check.id, x.checks.map(c => c.id), x.link, x.evidence, x.expected, x.roles]),
+        [["web1/security/coverage", "warning", "unsupported", "exposure", "exposure", ["exposure", "fail2ban", "contaners"], "",
+          { at: Date.UTC(2026, 9, 19, 18, 50), complete: null }, true, ["build"]]], "one task for the add-on, naming every check it lacks");
+    assert.deepStrictEqual(tasksOf(rows).notApplicable.map(n => [n.host.key, n.tile.pkg, n.check.id, n.check.reason, n.check.byProfile, n.check.until]),
+        [["web1", "security", "firewall", FIREWALL, true, Date.UTC(2026, 9, 20)]], "the check left out shows with the profile's reason");
+});
+
+t("named checks: one never reported or misspelled shows with its id; one reported counts as reported", () => {
+    const rows = named(status("ext-good-security.json"));
+    const sec = tileOn(rows, "web1", "security");
+    assert.deepStrictEqual([sec.coverage, sec.gapCheck.id, gapsOf(sec)], ["unsupported", "contaners",
+        [["containers", "partial", false], ["contaners", "unsupported", true]]], "contaners is not containers: no silent match");
+    assert.deepStrictEqual(rows[0].coverage.gaps, [{ pkg: "security", label: "Security Monitor", coverage: "unsupported", check: "contaners", notReported: true }]);
+    /* exposure is reported and checked: no gap; fail2ban is reported as not applicable, with its own reason */
+    assert.ok(!sec.gapChecks.some(c => c.id === "exposure" || c.id === "fail2ban"));
+    assert.deepStrictEqual(tasksOf(rows).notApplicable.map(n => [n.check.id, n.check.reason, n.check.byProfile || false]),
+        [["fail2ban", "fail2ban is not installed", false], ["firewall", FIREWALL, true]],
+        "an explicit not applicable keeps the add-on's reason, no success is made up for it");
+    assert.deepStrictEqual(coverageTasks(rows).map(x => [x.key, x.check.id, x.checks.map(c => [c.id, c.reason, c.notReported === true])]),
+        [["web1/security/coverage", "contaners", [["containers", "Docker could not be asked", false], ["contaners", null, true]]]]);
+    /* the same answer with the check gone (the add-on reports what it did before, less exposure):
+       a gap; back: none */
+    const doc = rawDoc("ext-good-security.json");
+    doc.checks = doc.checks.filter(c => c.id !== "exposure");
+    const gone = named({ kind: "ok", status: SB.validateStatus(JSON.stringify(doc), "security").status });
+    assert.deepStrictEqual(gapsOf(tileOn(gone, "web1", "security")),
+        [["containers", "partial", false], ["exposure", "unsupported", true], ["contaners", "unsupported", true]]);
+});
+
+t("named checks: a skip with a reason holds until its day, then the gap is back", () => {
+    const until = Date.UTC(2026, 9, 20);
+    for (const answer of ["ext-expect-security-ssh.json", "ext-good-security.json"]) {
+        const before = named(status(answer), until - 1);
+        assert.ok(!tileOn(before, "web1", "security").gapChecks.some(c => c.id === "firewall"), answer + ": not applicable while it runs");
+        assert.ok(tasksOf(before, until - 1).notApplicable.some(n => n.check.id === "firewall" && n.check.byProfile && n.check.reason === FIREWALL));
+        const after = named(status(answer), until);
+        const fw = tileOn(after, "web1", "security").gapChecks.find(c => c.id === "firewall");
+        assert.deepStrictEqual(fw && [fw.coverage, fw.notReported, fw.reason], ["unsupported", true, null], answer + ": on its day it is a gap again");
+        assert.ok(!tasksOf(after, until).notApplicable.some(n => n.check.id === "firewall"));
+    }
+});
+
+t("named checks: a missing, unreadable or locked-out add-on keeps its coarser gap, without a second task", () => {
+    const cases = {
+        missing: [null, null],
+        nostatus: ["update-gaps-old", null],
+        noaccess: ["security", { kind: "noaccess" }],
+        unreadable: ["security", { kind: "invalid", reason: "not-json", detail: null }],
+        timeout: ["security", { kind: "timeout" }],
+    };
+    const want = { missing: "missing", nostatus: "unsupported", noaccess: "noaccess", unreadable: "unreadable", timeout: "unreadable" };
+    Object.keys(cases).forEach(k => {
+        const rows = named(cases[k]);
+        const sec = tileOn(rows, "web1", "security");
+        assert.deepStrictEqual([sec.coverage, sec.gapCheck, sec.gapChecks, sec.gap], [want[k], null, [], "warning"], k);
+        assert.deepStrictEqual(coverageTasks(rows).map(x => [x.key, x.coverage, x.check, x.checks]), [["web1/security/coverage", want[k], null, []]],
+            k + ": one task, the add-on's");
+        assert.deepStrictEqual(tasksOf(rows).notApplicable, [], k + ": no made-up check of an add-on that says nothing");
+        assert.deepStrictEqual([rows[0].coverage.total, rows[0].coverage.gaps.map(g => [g.coverage, g.check || null])], [4, [[want[k], null]]], k);
+    });
+});
+
+t("named checks: an add-on expected alone keeps the old judgement; an answer without checks gets no made-up ids", () => {
+    const rows = named(status("ext-expect-security-ssh.json"));
+    ["cronjobs", "update-gaps"].forEach(p => {
+        const x = tileOn(rows, "web1", p);
+        assert.deepStrictEqual([x.coverage, x.gapChecks, x.status.checks, x.status.features], ["checked", [], null, []], p + ": its items decide, as before");
+    });
+    assert.ok(tasksOf(rows).tasks.filter(x => x.pkg === "update-gaps" && x.kind === "item").every(x => x.summaryOnly), "still summary only");
+    /* the same old producer with a check named in the profile: that check is a gap, nothing else changes */
+    const runs = named(status("ext-expect-security-ssh.json"), NOW, hsWith({ roles: [], expect: ["cronjobs/runs"], skip: [] }));
+    const cron = tileOn(runs, "web1", "cronjobs");
+    assert.deepStrictEqual([cron.coverage, gapsOf(cron), cron.status.features], ["unsupported", [["runs", "unsupported", true]], []]);
+    assert.deepStrictEqual(brief(tileOn(runs, "web1", "security")), ["security", "status", "ok", "ok", "checked", false, null], "not expected there");
+});
+
+t("named checks: two of one add-on are two gaps, and the add-on counts once", () => {
+    const rows = named(status("ext-expect-security-ssh.json"), NOW, hsWith({ roles: [], expect: ["security/exposure", "security/logins"], skip: [] }));
+    const sec = tileOn(rows, "web1", "security");
+    assert.deepStrictEqual(gapsOf(sec), [["exposure", "unsupported", true], ["logins", "unsupported", true]]);
+    assert.deepStrictEqual(rows[0].coverage, { total: 1, checked: 0, gaps: [
+        { pkg: "security", label: "Security Monitor", coverage: "unsupported", check: "exposure", notReported: true }] });
+    assert.deepStrictEqual(SB.coverageSummary(rows).total, 1);
+    assert.deepStrictEqual(coverageTasks(rows).map(x => [x.key, x.checks.map(c => c.id)]), [["web1/security/coverage", ["exposure", "logins"]]]);
+    /* reported again: no gap */
+    const doc = rawDoc("ext-expect-security-ssh.json");
+    doc.checks.push({ id: "exposure", state: "checked", title: "Reachable from the internet", checked_at: "2026-10-19T18:50:00Z", stale_after: 3600 },
+                    { id: "logins", state: "checked", title: "Logins", checked_at: "2026-10-19T18:50:00Z", stale_after: 3600 });
+    const back = named({ kind: "ok", status: SB.validateStatus(JSON.stringify(doc), "security").status }, NOW,
+        hsWith({ roles: [], expect: ["security/exposure", "security/logins"], skip: [] }));
+    assert.deepStrictEqual([tileOn(back, "web1", "security").coverage, back[0].coverage], ["checked", { total: 1, checked: 1, gaps: [] }]);
+    assert.deepStrictEqual(coverageTasks(back), []);
+});
+
+t("named checks: without a profile nothing is made up", () => {
+    const rows = SB.buildBoard([okHost("web1", false, [["security", "security"]], { security: status("ext-expect-security-ssh.json") })], NOW);
+    assert.deepStrictEqual([tileOn(rows, "web1", "security").coverage, tileOn(rows, "web1", "security").gapChecks], ["checked", []]);
 });
 
 /* ---------- what the suite does not cover yet ---------- */

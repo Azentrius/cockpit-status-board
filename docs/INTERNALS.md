@@ -149,7 +149,8 @@ is marked "new"; that is a mark, not a step of the order.
 
 **Each task** shows its state's label, its title (the finding's; the item's with its value; the gap
 as in the host's coverage line, "Update Gaps is missing" for an expected add-on that is not
-installed; the host's problem; "No target profile"), the host and the add-on (for a finding also
+installed, "Security Monitor: exposure not reported" for a check the host's profile names that the
+add-on does not report; the host's problem; "No target profile"), the host and the add-on (for a finding also
 its item), its reasons as neutral chips ("reachable from the internet", "reachable from some
 addresses", "known to be exploited", "fix available", "summary only", "findings unknown", and for a
 gap of a host with a target profile "expected for role web" or "not expected here"), what the
@@ -223,8 +224,10 @@ board loads again (`state.open`, by `data-key`; not kept across page loads).
 
 **Only what needs attention** (`notable()` in `lib/status.js`, on the tab Hosts and coverage): the
 switch leaves out tiles whose state is below Notice (OK, Unknown, Not installed, No status, and the
-unrated tiles of add-ons a host is not expected to have), and keeps tiles that are still loading
-and expected add-ons that are missing or report no status. A row's label still says the whole row;
+unrated tiles of add-ons a host is not expected to have), and keeps tiles that are still loading,
+expected add-ons that are missing or report no status, and expected add-ons with a gap in their
+coverage whatever their own state (a check done in part, a check the profile names that the
+add-on does not report): their gap is a task. A row's label still says the whole row;
 a row left without tiles says "Nothing that needs attention". The coverage lines stay. The browser
 keeps the switch in `localStorage`; without storage it starts off. Up to
 0.2.3 No access was left out too, and an answer that rated nothing showed as Unknown: with the
@@ -238,10 +241,21 @@ add-on's answer, changes nothing there.
 
 - **With a profile** the expected add-ons are the add-ons in `expect`, and the add-on of every
   check in it (`security/exposure` expects `security`); every check of an expected add-on counts.
+  A check named in `expect` must be reported: where the add-on's valid answer does not list it in
+  `checks` (or sends no `checks` at all), `notReportedChecks()` adds a check of state
+  `unsupported` to the tile's copy of the answer, with the id as its title and `notReported` set,
+  one for each such check in the order of the profile. It is a gap of the add-on like any other
+  check: the coverage line says "Security Monitor: exposure not reported", the add-on's task lists
+  it with the reason "Expected check is not reported", and the add-on still counts once. A check
+  the answer reports counts as reported, `notapplicable` with the add-on's reason included. An
+  add-on that is missing, installed without the status entry, unreadable or without access keeps
+  the gap of its tile, and nothing is added for its checks; an add-on expected alone gets no
+  made-up check.
   A skip (`update-gaps/cve`) that has no `until`, or whose `until` lies ahead at the board's clock,
   makes that check `notapplicable` in that row, with the skip's reason (`byProfile`, `until` on the
-  check; the tile's `status` is then a copy, the add-on's answer stays as it is). On the day of its
-  `until` the check counts again. A check the add-on itself reports as `notapplicable` keeps its
+  check; the tile's `status` is then a copy, the add-on's answer stays as it is), also a check the
+  answer does not report. On the day of its `until` the check counts again, as a gap where the
+  add-on still does not report it. A check the add-on itself reports as `notapplicable` keeps its
   own reason; a skip that names an add-on alone leaves out nothing. Every expected add-on has a
   tile in that row, installed or not. One that no host reports with a status entry gets it in that
   row only: Missing where it is not installed, No status where it is installed in a version
@@ -263,7 +277,10 @@ with `checks` takes the worst of its checks that apply (`checksCoverage()`; `not
 profile's skips included, does not count), from better to worse `checked`, `partial`, `stale` (a
 `checked` or `partial` check past its `checked_at + stale_after`), `unsupported`, `failed`,
 `unconfigured`, `noaccess`; the tile keeps that check as `gapCheck` and every check with a gap as
-`gapChecks`. When no check applies, the items decide as without checks. How a gap counts
+`gapChecks`. When no check applies, the items decide as without checks. A check the host's profile
+names and the answer does not report is one of these checks, `unsupported` (above,
+"Expectation"); in an answer without `checks` it outranks what the items say (`unchecked`,
+`stale`), as in the order the page names gaps in. How a gap counts
 (`tile.gap`) depends on whether the host is expected to have the add-on:
 
 | Coverage | expected | not expected |
@@ -326,8 +343,8 @@ complete only with a `checked` check naming its item, every entry taken over and
 item's state from `itemState()`: never better than its open findings. The coverage uses the
 checks, the tab Needs attention the findings, and the expectation the profile (above).
 `test/fixtures/status/ext-*.json` are the good, broken, hostile and incompatible answers;
-`ext-complete-*.json` among them are the cases of a complete list that Host Settings keeps
-byte-identical copies of.
+`ext-complete-*.json` among them are the cases of a complete list, and `ext-expect-*.json` those of
+checks a profile names, that Host Settings keeps byte-identical copies of.
 
 **Versions.** A tile names the add-on's version in its facts. `buildBoard()` compares the versions
 of the same add-on on all hosts (`compareVersions()`: three numbers, a suffix such as `~dev…` or
