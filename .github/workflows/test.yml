@@ -75,8 +75,8 @@ jobs:
             dpkg -L cockpit-status-board | grep -qx /usr/share/doc/cockpit-status-board/CC-BY-4.0-Font-Awesome.txt
             apt-get remove -y -qq cockpit-status-board > /dev/null
             test ! -e /usr/share/cockpit/status-board'
-          docker run --rm -v "$PWD/dist:/dist:ro" fedora:43 sh -ec '
-            dnf install -y -q /dist/*.rpm
+          docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD/tools/dnf.sh:/dnf.sh:ro" fedora:43 sh -ec '
+            sh /dnf.sh install -y -q /dist/*.rpm
             rpm -V cockpit-status-board
             test -f /usr/share/cockpit/status-board/manifest.json
             dnf remove -y -q cockpit-status-board
@@ -110,6 +110,8 @@ jobs:
   # Debian 13 and Fedora 43: installed with the distribution's own Cockpit (its version is
   # printed), the files as the package database has them, the removal. No Cockpit runs there, so
   # an installed package is not yet a tested system.
+  # dnf runs through tools/dnf.sh, with time limits and three tries: on AlmaLinux the first dnf
+  # install of a job once took almost 14 minutes, and once ran until the job's time limit.
   install:
     name: install (${{ matrix.image }})
     runs-on: ubuntu-24.04
@@ -131,10 +133,10 @@ jobs:
         env:
           IMAGE: ${{ matrix.image }}
         run: |
-          docker run --rm -v "$PWD/dist:/dist:ro" "$IMAGE" sh -ec '
+          docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD/tools/dnf.sh:/dnf.sh:ro" "$IMAGE" sh -ec '
             . /etc/os-release
             echo "$PRETTY_NAME"
-            dnf install -y -q /dist/*.rpm
+            sh /dnf.sh install -y -q /dist/*.rpm
             rpm -q cockpit-bridge
             rpm -V cockpit-status-board
             test -f /usr/share/cockpit/status-board/manifest.json
