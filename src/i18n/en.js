@@ -96,6 +96,10 @@
             noaccess: check => `${check} without access`,
             unsupported: check => `${check} not supported here`,
         },
+        /* A check the host's target profile names that the add-on does not report: after the
+           add-on's name ("Security Monitor: exposure not reported"), and as its reason. */
+        checkNotReported: check => `${check} not reported`,
+        notReported: "Expected check is not reported",
 
         /* The tab "Needs attention". */
         newMark: "new",

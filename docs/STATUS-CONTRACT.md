@@ -249,10 +249,25 @@ add-ons use `none` for "nothing to rate" as well.
 and checks they expect, and checks left out on purpose. It names only its own host.
 
 - `expect` is already resolved from the roles. An add-on (`security`) is expected with every check
-  it runs; a check (`security/exposure`) makes its add-on expected as well. Names are package
-  folders, as in `addon`.
+  it runs; a check (`security/exposure`) makes its add-on expected as well, and asks that add-on to
+  report exactly that check. Names are package folders, as in `addon`.
 - A skip names a check as `addon/check`; one that names an add-on alone leaves out nothing. It
   holds until the day of its `until`, read at the board's clock, or for good without one.
+- **A named check that is not reported is a gap.** When an expected add-on answers validly but its
+  `checks` do not list a check the profile names (it sends no `checks` at all, or not that id, a
+  misspelled one included), the board counts a check of its own for it: state `unsupported`, the
+  id as its title, the reason "Expected check is not reported". It is a warning, part of the
+  add-on's task and a gap of the host's coverage. Each such check is a gap of its own, while the
+  add-on still counts once among the expected add-ons. A check the add-on reports counts as it is
+  reported: `notapplicable` with its reason is no gap, and no success is made up for it. A skip
+  that runs leaves such a check out too, until its day. While the add-on is not installed,
+  installed without the status entry, unreadable or without access, the gap of the add-on stands
+  for its checks and nothing is added. An add-on expected alone, with no check named, is judged as
+  before, and no check id is made up for it. This adds no required field to version 1: an add-on
+  meets a named check by sending it in `checks`. Host Settings' notifier judges named checks
+  alike; the answers `test/fixtures/status/ext-expect-*.json` (a profile that names four checks of
+  the Security Monitor, one of them misspelled and one left out until a day, and a Security Monitor
+  that reports its check `ssh` only) are shared with it byte for byte.
 - The board counts an expected add-on that is not installed as missing (a warning), and one
   installed in a version without the status entry as not supported (a warning), also where no
   host reports it with a status entry; it rates the gaps of an add-on the profile does not expect
@@ -267,6 +282,11 @@ better than the data shows:
   coverage whatever it answers: not installed (missing), installed in a version without the status
   entry (not supported), or with a status that cannot be read, also where no other host reports
   that add-on. It never drops out of the count because no host knows it.
+- **A named check counts until it is reported.** A check the profile names that drops out of an
+  answer is a gap from that answer on, and one that comes back `checked` and in time closes it.
+  Neither resolves a finding or makes one new: findings follow their lists alone, as below. Host
+  Settings' notifier tells each such change once ("Check no longer possible", "Check possible
+  again").
 - **Complete means complete, `total` included.** A list counts as complete only as "A list is
   complete" above says; one that counts more findings than it holds says nothing about those it
   does not hold, and a finding known before stays as it was.

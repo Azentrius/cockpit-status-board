@@ -527,8 +527,9 @@
        a host still loading. OK, Unknown, Not installed and No status do not. No access and an
        answer that rates nothing are warnings (gaps in what the board knows), so they do, unless
        the host's profile does not expect the add-on; so does an expected add-on that is missing or
-       reports no status. */
-    const notable = tile => tile.kind === "loading" || rank(tile.state) >= RANK.info;
+       reports no status, and an expected add-on with a gap in its coverage whatever its own state
+       (a check it reports in part, or one the profile names that it does not report). */
+    const notable = tile => tile.kind === "loading" || rank(tile.state) >= RANK.info || (tile.expected === true && !!tile.gap);
 
     /* ---------- a host's target profile ---------- */
 
@@ -538,7 +539,8 @@
     /* What a host is expected to have, from its profile at the time now (ms), or null without one:
          roles   the profile's roles, as it sends them
          addons  the expected add-ons: every add-on of `expect`, and the add-on of every check in it
-         checks  the checks `expect` names ("security/exposure")
+         checks  the checks `expect` names ("security/exposure"): each one its add-on must report
+                 (notReportedChecks())
          skips   the checks left out on purpose whose `until` has not passed (none: for good), by
                  "addon/check"; an entry that names an add-on alone leaves out nothing */
     function expectationOf(profile, now) {
@@ -555,6 +557,27 @@
             if (s.check.indexOf("/") >= 0 && (s.until === null || s.until > now)) skips.set(s.check, s);
         });
         return { roles: profile.roles, addons, checks, skips };
+    }
+
+    /* The checks of the add-on pkg that a profile names (named: "addon/check" entries, as
+       expectationOf() gives them in checks) and that its answer does not report (checks:
+       status.checks, or null for an answer without them), in the order of the profile. Each one is
+       a check the board makes up for the gap: state "unsupported", the check's id as its title,
+       nothing else of its own, and notReported true, so the page can say why ("Expected check is
+       not reported"). A check the answer reports in any state, notapplicable included, is no gap
+       here; the board never makes up the id of a check the profile does not name. */
+    function notReportedChecks(checks, pkg, named) {
+        const have = new Set((Array.isArray(checks) ? checks : []).map(c => c.id));
+        const out = [];
+        named.forEach(e => {
+            const at = e.indexOf("/");
+            if (at < 0 || e.slice(0, at) !== pkg || have.has(e.slice(at + 1))) return;
+            const id = e.slice(at + 1);
+            have.add(id);
+            out.push({ id, state: "unsupported", title: id, item: null, checkedAt: null, staleAfter: null, reason: null, link: null,
+                       notReported: true });
+        });
+        return out;
     }
 
     /* ---------- what the suite does not cover yet ---------- */
@@ -626,8 +649,9 @@
          unreadable    no usable answer (Status unreadable, Command refused)
          partial, failed, unconfigured
                        only from checks: the state of the worst check
-         unsupported   from checks, or an expected add-on installed in a version without the
-                       status entry (No status)
+         unsupported   from checks (also one the host's profile names and the answer does not
+                       report, which buildBoard() adds: notReportedChecks()), or an expected add-on
+                       installed in a version without the status entry (No status)
          missing       an expected add-on that is not installed
        An answer with checks takes the worst of its checks that apply (checksCoverage()); an answer
        without them is judged by its tile as before. tile.expected says whether the host is
@@ -721,8 +745,12 @@
        Profile: a host's own Host Settings may send its target profile (profile, else null); it
        decides for that host's row only. With it the expected add-ons are those of
        expectationOf(), and every one of them has a tile in that row, installed or not; a check it
-       leaves out (skips) is "notapplicable" in that row, with the profile's reason (byProfile,
-       until; tile.status is then a copy with those checks); an expected add-on no host reports
+       names ("security/exposure") that the add-on's valid answer does not report is a check of
+       state "unsupported" in that row (notReportedChecks(): notReported, the id as its title),
+       while an add-on that is missing, cannot be read or answers without access keeps the gap of
+       its tile instead; a check it leaves out (skips) is "notapplicable" in that row, with the
+       profile's reason (byProfile, until), also one the answer does not report (tile.status is
+       then a copy with those checks); an expected add-on no host reports
        with a status entry gets its tile in that row only ("missing", "nostatus", or Status
        unreadable for a manifest that cannot be read), named by this host's manifest, else by its
        package. Without a profile every installed add-on with a status entry is expected and none
@@ -795,6 +823,10 @@
                 if (t.expected && t.kind === "missing") Object.assign(t, { state: "warning", word: "absent" });
                 else if (t.expected && t.kind === "nostatus") t.state = "warning";
                 else if (!t.expected && (t.kind === "noaccess" || t.word === "unchecked")) t.state = "none";
+                /* a check the profile names that the valid answer does not report: a gap of its own,
+                   one per check, while the add-on counts once */
+                const absent = expect && t.kind === "status" ? notReportedChecks(t.status.checks, t.pkg, expect.checks) : [];
+                if (absent.length) t.status = Object.assign({}, t.status, { checks: (t.status.checks || []).concat(absent) });
                 if (expect && t.kind === "status" && Array.isArray(t.status.checks) &&
                     t.status.checks.some(c => c.state !== "notapplicable" && expect.skips.has(t.pkg + "/" + c.id))) {
                     t.status = Object.assign({}, t.status, { checks: t.status.checks.map(c => {
@@ -816,12 +848,14 @@
             const state = tiles.reduce((s, t) => worse(s, t.state), "none");
             const covered = tiles.filter(t => t.coverage && t.expected);
             /* null where no expected add-on could be read (the host's tile says why); a gap that
-               comes from a check names it (check: its title) */
+               comes from a check names it (check: its title; notReported: a check the profile
+               names that the add-on does not report) */
             const coverage = covered.length ? {
                 total: covered.length,
                 checked: covered.filter(t => t.coverage === "checked").length,
                 gaps: covered.filter(t => t.coverage !== "checked").map(t =>
-                    Object.assign({ pkg: t.pkg, label: t.label, coverage: t.coverage }, t.gapCheck ? { check: t.gapCheck.title } : {})),
+                    Object.assign({ pkg: t.pkg, label: t.label, coverage: t.coverage }, t.gapCheck ? { check: t.gapCheck.title } : {},
+                                  t.gapCheck && t.gapCheck.notReported ? { notReported: true } : {})),
             } : null;
             const shown = r.reach === "ok" && r.discovery === "ok" && tiles.length > 0;
             const noProfile = shown && !profile;
@@ -880,7 +914,9 @@
                             it: a warning for an expected add-on, missing ones included, a notice
                             or a warning for one the host's profile does not expect, nothing for
                             an unrated gap; expected (tile.expected) and roles (the profile's, or
-                            null without one) say why
+                            null without one) say why; one task per add-on, whose checks list
+                            every check with a gap, a check the profile names that the add-on does
+                            not report among them (notReported)
            kind "profile"   a host that could be read sends no target profile (row.noProfile),
                             a notice; tile is its Host Settings where installed, else one that
                             opens nothing
@@ -888,7 +924,8 @@
                             unreadable), in the state of its tile
          accepted       the findings in state info or worse whose acceptance runs, soonest end first
          notApplicable  the checks in state notapplicable, with their reason (check.byProfile and
-                        check.until for one the host's profile leaves out)
+                        check.until for one the host's profile leaves out, also one the add-on
+                        does not report)
        Every task carries host, tile (for the jump), key (unique on the board), state, title (a
        text of the host, or "" where the page names it), since (or null), isNew (since less than a
        day ago), exposure, exploited and fix (findings only, else null), link (the place in the
@@ -1008,7 +1045,7 @@
         validateStatus, stateOfItems, itemState, evaluate, classifyFailure, outputCollector,
         packageOfManifestPath, statusEntry, menuLabel, statusArgv, packagesOf,
         connectionString, parseMachines, buildBoard, sortHosts, reachOf, compareVersions, notable,
-        coverageOf, coverageSummary, checksCoverage, buildTasks, expectationOf, gapRating,
+        coverageOf, coverageSummary, checksCoverage, buildTasks, expectationOf, notReportedChecks, gapRating,
         LIMIT_AREAS, limitsOf,
     };
     if (typeof module === "object" && module.exports) module.exports = api;

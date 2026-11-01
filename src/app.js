@@ -444,8 +444,10 @@
     }
 
     /* One gap: "Cron Jobs: no access", or with the check that shows it, "Security Monitor:
-       Container hardening partly checked". */
-    const gapText = g => g.label + ": " + (g.check ? T.checkGap[g.coverage](g.check) : T.coverageWords[g.coverage]);
+       Container hardening partly checked", "Security Monitor: exposure not reported" for a check
+       the host's profile names that the add-on does not report. */
+    const gapText = g => g.label + ": " + (g.check ? (g.notReported ? T.checkNotReported(g.check) : T.checkGap[g.coverage](g.check))
+        : T.coverageWords[g.coverage]);
     /* A host's coverage below its name: "2 of 3 expected add-ons checked · Cron Jobs: no access". */
     const coverageLine = c => [T.hostCoverage(c.checked, c.total)].concat(c.gaps.map(gapText)).join(" · ");
     /* Below a host's name: its coverage, then the roles of its target profile as neutral chips (a
@@ -656,7 +658,7 @@
             return [T.discoveryText, tile.message];
         case "coverage":
             if (task.check) {
-                return [task.checks.map(c => c.title + (c.reason ? ": " + c.reason : "") +
+                return [task.checks.map(c => c.title + (c.notReported ? ": " + T.notReported : c.reason ? ": " + c.reason : "") +
                     (c.staleAt !== null ? " (" + T.staleSince(fmtWhen(c.staleAt)) + ")" : "")).join("; "), null];
             }
             switch (task.coverage) {
@@ -687,7 +689,8 @@
         const title = task.kind === "host" ? T.words[tile.word]
             : task.kind === "profile" ? T.noProfile
             : task.kind === "coverage" && task.coverage === "missing" ? T.missingTitle(tile.label)
-            : task.kind === "coverage" ? gapText({ label: tile.label, coverage: task.coverage, check: task.check ? task.check.title : null })
+            : task.kind === "coverage" ? gapText({ label: tile.label, coverage: task.coverage, check: task.check ? task.check.title : null,
+                                                   notReported: !!(task.check && task.check.notReported) })
             : task.kind === "item" && task.item.value ? task.item.title + ": " + task.item.value : task.title;
         const where = [h("strong", null, host.label), tile.pkg ? " · " + tile.label : null, task.kind === "finding" ? " · " + task.item.title : null];
         const why = [
