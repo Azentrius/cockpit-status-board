@@ -1,15 +1,24 @@
 # Status Board
 
-A [Cockpit](https://cockpit-project.org) page with the state of the Azentrius add-ons on every host
-of Cockpit's host switcher: one row per host, one tile per add-on, such as
+A [Cockpit](https://cockpit-project.org) page that shows what needs attention across the
+Azentrius add-ons, how much of each host they really checked, and what each host's target profile
+expects. It reads the add-ons on every host of Cockpit's host switcher, such as
 [Cron Jobs](https://github.com/Azentrius/cockpit-cronjobs),
 [Image Update Monitor](https://github.com/Azentrius/cockpit-image-update-monitor),
-[Update Gaps](https://github.com/Azentrius/cockpit-update-gaps) and
-[Security Monitor](https://github.com/Azentrius/cockpit-security-monitor).
-It belongs on the Cockpit host from which the others are reached.
+[Update Gaps](https://github.com/Azentrius/cockpit-update-gaps),
+[Security Monitor](https://github.com/Azentrius/cockpit-security-monitor) and
+[Host Settings](https://github.com/Azentrius/cockpit-host-settings), which sends the target
+profile. It belongs on the Cockpit host from which the others are reached.
 
 Status Board only reads. It runs each add-on's `status` verb, asks for no administrative access
-and changes nothing on any host; a click on a tile opens the add-on on its host.
+and changes nothing on any host; a task's button or a tile opens the add-on on its host.
+
+**The host switcher.** The board takes its hosts from Cockpit's host switcher, which Cockpit
+deprecated in version 322 and has switched off by default on newer systems such as Fedora 41 and
+RHEL 10. The board reads every host without it, but opens an add-on on another host only with
+`AllowMultiHost`. With that on, the pages of all hosts share one browser session, where Cockpit
+cannot keep them apart: switch it on only where every host is trusted as much as this one (see
+[Known limits](#known-limits)).
 
 ![The board on a bastion with three hosts behind it: the coverage above, one tile per add-on](docs/img/board.png)
 
@@ -394,8 +403,14 @@ More in [CONTRIBUTING.md](CONTRIBUTING.md).
 - Only the host switcher's list in `/etc/cockpit/machines.d` counts: a host added without
   administrative access, which the switcher keeps for one browser session only, is not on the
   board.
-- Without `AllowMultiHost` the board reads every host, but only this host's tiles open their
-  add-on.
+- The board rests on Cockpit's host switcher: its hosts are the switcher's list, and opening an
+  add-on on another host needs `AllowMultiHost`. Cockpit deprecated the switcher in
+  [version 322](https://cockpit-project.org/blog/cockpit-322.html), since hosts in one browser
+  session can affect each other (through remote channels, frames and the cache), and named no date
+  for its removal. Without `AllowMultiHost` the board reads every host, but only this host's tiles
+  open their add-on. The board itself takes only data from other hosts, never code (see
+  [Safety](#safety)); a jump with `AllowMultiHost` loads the add-on's page from the other host into
+  this browser session.
 - A tile is as current as the add-on's own data: the board shows its age and "out of date since …",
   but asks no add-on to check again. It loads only while the page is open and notifies no one.
 - A host that does not answer within 20 seconds is "Unreachable"; a status command has 20 seconds
