@@ -6,22 +6,35 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>Apache-2.0</project_license>
   <name>Status Board</name>
-  <summary>The state of the Azentrius add-ons on every host at a glance</summary>
-  <summary xml:lang="de">Der Zustand der Azentrius-Add-ons auf allen Hosts auf einen Blick</summary>
+  <summary>What needs attention across the Azentrius add-ons on every host</summary>
+  <summary xml:lang="de">Handlungsbedarf aus den Azentrius-Add-ons auf allen Hosts</summary>
   <description>
     <p>
-      A Cockpit page with one row per host of the host switcher and one tile per Azentrius add-on,
-      such as Cron Jobs, Image Update Monitor, Update Gaps and Security Monitor: its state, its most
-      important figure and the age of its data. Hosts that do not answer, locked SSH keys, add-ons
-      that are missing on a host and data that is out of date are shown too. A click opens the
-      add-on on its host.
+      A tab "Needs attention" lists what to do on all hosts, each task with its reasons, its evidence
+      and a button into the add-on. Each host shows how many of the add-ons it is expected to have
+      were checked, its roles and expected checks from the target profile that Host Settings sends,
+      a check the profile names that its add-on does not report, and as planned scope the areas the
+      suite does not cover yet.
     </p>
     <p xml:lang="de">
-      Eine Cockpit-Seite mit einer Zeile je Host des Host-Umschalters und einer Kachel je
-      Azentrius-Add-on, etwa Cron Jobs, Image Update Monitor, Update Gaps und Security Monitor: sein
+      Ein Reiter „Handlungsbedarf“ listet, was auf allen Hosts zu tun ist, jede Aufgabe mit ihren
+      Gründen, ihrem Nachweis und einem Knopf ins Add-on. Jeder Host zeigt, wie viele der erwarteten
+      Add-ons geprüft sind, seine Rollen und erwarteten Prüfungen aus dem Sollprofil, das Host
+      Settings meldet, eine im Profil genannte Prüfung, die ihr Add-on nicht meldet, und als
+      geplanten Umfang die Bereiche, die die Suite noch nicht abdeckt.
+    </p>
+    <p>
+      The tab "Hosts and coverage" has one row per host and one tile per Azentrius add-on, such as
+      Cron Jobs, Image Update Monitor, Update Gaps, Security Monitor and Host Settings: its state,
+      its most important figure and the age of its data. Hosts that do not answer, locked SSH keys,
+      add-ons that are missing on a host and data that is out of date are shown too.
+    </p>
+    <p xml:lang="de">
+      Der Reiter „Hosts und Abdeckung“ hat eine Zeile je Host und eine Kachel je Azentrius-Add-on,
+      etwa Cron Jobs, Image Update Monitor, Update Gaps, Security Monitor und Host Settings: sein
       Zustand, seine wichtigste Kennzahl und das Alter seiner Daten. Auch Hosts, die nicht antworten,
       gesperrte SSH-Schlüssel, Add-ons, die auf einem Host fehlen, und veraltete Daten werden
-      gezeigt. Ein Klick öffnet das Add-on auf seinem Host.
+      gezeigt.
     </p>
     <p>
       A tile folds out every entry of its add-on in a table below its row, and each entry opens its
@@ -34,24 +47,17 @@
       eine Kachel sagt, wenn auf einem anderen Host eine neuere Version ihres Add-ons läuft.
     </p>
     <p>
-      A tab "Needs attention" lists what to do on all hosts, each task with its reasons, its evidence
-      and a button into the add-on. Each host shows its roles from the target profile that Host
-      Settings sends, how many of the add-ons it is expected to have were checked, and as planned
-      scope the areas the suite does not cover yet.
-    </p>
-    <p xml:lang="de">
-      Ein Reiter „Handlungsbedarf“ listet, was auf allen Hosts zu tun ist, jede Aufgabe mit ihren
-      Gründen, ihrem Nachweis und einem Knopf ins Add-on. Jeder Host zeigt seine Rollen aus dem
-      Sollprofil, das Host Settings meldet, wie viele der erwarteten Add-ons geprüft sind, und als
-      geplanten Umfang die Bereiche, die die Suite noch nicht abdeckt.
-    </p>
-    <p>
       The page only reads: it runs each add-on's status verb and never asks for administrative
-      access. It belongs on the Cockpit host from which the others are reached.
+      access. It belongs on the Cockpit host from which the others are reached and takes its hosts
+      from Cockpit's host switcher, which Cockpit has deprecated. It opens an add-on on another host
+      only with AllowMultiHost, under which the pages of all hosts share one browser session.
     </p>
     <p xml:lang="de">
       Die Seite liest nur: Sie ruft das Status-Verb jedes Add-ons auf und fragt nie nach
-      Administratorzugriff. Sie gehört auf den Cockpit-Host, von dem aus die anderen erreicht werden.
+      Administratorzugriff. Sie gehört auf den Cockpit-Host, von dem aus die anderen erreicht werden,
+      und nimmt ihre Hosts aus dem Host-Umschalter, den Cockpit abgekündigt hat. Ein Add-on auf einem
+      anderen Host öffnet sie nur mit AllowMultiHost, unter dem die Seiten aller Hosts eine
+      Browsersitzung teilen.
     </p>
   </description>
   <extends>org.cockpit_project.cockpit</extends>

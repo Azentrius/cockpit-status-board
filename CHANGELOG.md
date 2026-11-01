@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 – 2026-11-01
 
 A check that a host's target profile names counts only when its add-on reports it.
 
@@ -18,6 +18,13 @@ A check that a host's target profile names counts only when its add-on reports i
 - **Status contract:** the rule for named checks in `docs/STATUS-CONTRACT.md`, without a new
   required field. Two shared answers, `test/fixtures/status/ext-expect-*.json`, hold the cases for
   Host Settings as well.
+- **README and AppStream:** what needs attention, the coverage and the target profiles come first,
+  and both say openly that the board rests on Cockpit's host switcher, which Cockpit has
+  deprecated, and what `AllowMultiHost` lets the hosts of one browser session do. The pictures
+  show this version.
+- **Releases:** the release workflow waits for the shared suite (workflow `e2e-suite`: the board
+  with the real Host Settings and Security Monitor) to pass for the commit it releases, and every
+  pull request runs it too.
 
 ## 0.3.0 – 2026-10-26
 
