@@ -414,3 +414,4 @@ and is listed in [NOTICE](NOTICE). The page contains no code from Cockpit; it us
 Please report security issues privately, see [SECURITY.md](SECURITY.md).
 
 Made by [Azentrius](https://azentrius.com).
+
