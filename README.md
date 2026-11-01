@@ -378,7 +378,9 @@ More in [CONTRIBUTING.md](CONTRIBUTING.md).
    and add a section for it to `CHANGELOG.md` (`tools/check-version.sh` checks all three).
 2. Merge to `main`.
 3. On GitHub: Actions › **release** › Run workflow (branch `main`). The workflow checks the version
-   against `src/app.js` and the existing tags, runs the offline and the browser tests, builds
+   against `src/app.js` and the existing tags, waits for the shared suite (workflow `e2e-suite`,
+   the board with the real Security Monitor and Host Settings) of that commit to pass, runs the
+   offline and the browser tests, builds
    `cockpit-status-board-VERSION.tar.gz` and the `.deb` and `.rpm`, all reproducible, with
    `SHA256SUMS` and a signed build provenance, and creates the tag `vVERSION` with a release whose
    notes come from `CHANGELOG.md`. Releases are immutable.
